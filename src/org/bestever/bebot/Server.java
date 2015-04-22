@@ -141,6 +141,11 @@ public class Server {
 	public ArrayList<String> wads;
 
 	/**
+	 * Contains a list of all the optional wads used by the server separated by a space
+	 */
+	public ArrayList<String> optwads;
+	
+	/**
 	 * Contains a list of all the wads separated by a space which will be searched for maps
 	 */
 	public String[] mapwads;
@@ -238,6 +243,7 @@ public class Server {
 
 		// Initialize the wad arraylist
 		server.wads = new ArrayList<String>();
+		server.optwads = new ArrayList<String>();
 
 		// Check if autoRestart was enabled
 		if (autoRestart)
@@ -377,6 +383,15 @@ public class Server {
 					if (!MySQL.checkHashes(server.wads.toArray(new String[wadArray.length])))
 						return;
 					break;
+				case "optionalwad":
+					String[] wadArray2 = addWads(m.group(2));
+					if (wadArray2.length > 0) {
+						for (String wad : wadArray2)
+							server.optwads.add(wad);
+					}
+					if (!MySQL.checkHashes(server.optwads.toArray(new String[wadArray2.length])))
+						return;
+					break;
 			}
 		}
 
@@ -399,7 +414,17 @@ public class Server {
 				}
 			}
 		}
-
+		
+		// Check if the optional WADs exist
+		if (server.optwads != null) {
+			for (int i = 0; i < server.optwads.size(); i++) {
+				if (!Functions.fileExists(server.bot.cfg_data.bot_wad_directory_path + server.optwads.get(i))) {
+					server.bot.sendMessage(server.bot.cfg_data.irc_channel, "File '" + server.optwads.get(i) + "' does not exist!");
+					return;
+				}
+			}
+		}
+		
 		// Now that we've indexed the string, check to see if we have what we need to start a server
 		if (server.iwad == null) {
 			server.bot.sendMessage(server.bot.cfg_data.irc_channel, "You are missing an iwad, or have specified an incorrect iwad. You can add it by appending: iwad=your_iwad");

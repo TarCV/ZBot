@@ -126,6 +126,13 @@ public class ServerProcess extends Thread {
 			}
 		}
 
+		// Optional WADs
+		if (server.optwads.size() > 0) {
+			for (String wad : server.optwads) {
+				addParameter("-optfile", server.bot.cfg_data.bot_wad_directory_path + wad);
+			}
+		}
+		
 		if (server.skill != -1)
 			addParameter("+skill", String.valueOf(server.skill));
 
