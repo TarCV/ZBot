@@ -375,6 +375,7 @@ public class Server {
 					}
 					break;
 				case "wad":
+				case "file":
 					String[] wadArray = addWads(m.group(2));
 					if (wadArray.length > 0) {
 						for (String wad : wadArray)
@@ -384,6 +385,9 @@ public class Server {
 						return;
 					break;
 				case "optionalwad":
+				case "optwad":
+				case "opt":
+				case "optfile":
 					String[] wadArray2 = addWads(m.group(2));
 					if (wadArray2.length > 0) {
 						for (String wad : wadArray2)
