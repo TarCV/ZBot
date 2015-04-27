@@ -126,6 +126,9 @@ public class ServerProcess extends Thread {
 			}
 		}
 
+		if (server.config != null)
+			addParameter("+exec", server.bot.cfg_data.bot_cfg_directory_path + server.config);
+			
 		// Optional WADs
 		if (server.optwads.size() > 0) {
 			for (String wad : server.optwads) {
@@ -162,9 +165,6 @@ public class ServerProcess extends Thread {
 
 		if (server.servername != null)
 			addParameter("+sv_hostname", server.bot.cfg_data.bot_hostname_base + " " + server.servername);
-
-		if (server.config != null)
-			addParameter("+exec", server.bot.cfg_data.bot_cfg_directory_path + server.config);
 
 		// Add rcon/file based stuff
 		addParameter("+sv_rconpassword", server.server_id);
