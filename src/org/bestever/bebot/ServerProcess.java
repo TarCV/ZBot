@@ -327,7 +327,7 @@ public class ServerProcess extends Thread {
 			server.bot.removeServerFromLinkedList(this.server);
 
 			// Auto-restart the server if enabled, and only if successfully started
-			if (server.auto_restart && server.port != 0 && this.restarts < ) {
+			if (server.auto_restart && server.port != 0 && this.restarts < cfg_data.max_restarts) {
 				server.temp_port = server.port;
 				server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Server crashed! Attempting to restart server...");
 				server.bot.processHost(server.user_level, server.bot.cfg_data.irc_channel, server.sender, server.irc_hostname, server.host_command, true, server.port);
