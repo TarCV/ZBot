@@ -51,6 +51,16 @@ public class ServerProcess extends Thread {
 	public long last_activity;
 
 	/**
+	 * Counts how many times the server has automatically restarted
+	 */
+	public short restarts = 0;
+	
+	/**
+	 * Config data
+	 */
+	public ConfigData cfg_data;
+	
+	/**
 	 * This should be called before starting run
 	 * @param serverReference A reference to the server it is connected to (establishing a back/forth relationship to access its data)
 	 */
@@ -317,7 +327,7 @@ public class ServerProcess extends Thread {
 			server.bot.removeServerFromLinkedList(this.server);
 
 			// Auto-restart the server if enabled, and only if successfully started
-			if (server.auto_restart && server.port != 0) {
+			if (server.auto_restart && server.port != 0 && this.restarts < ) {
 				server.temp_port = server.port;
 				server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Server crashed! Attempting to restart server...");
 				server.bot.processHost(server.user_level, server.bot.cfg_data.irc_channel, server.sender, server.irc_hostname, server.host_command, true, server.port);

@@ -217,6 +217,11 @@ public class ConfigData {
 	 * Interval to run server cleanup
 	 */
 	public int cleanup_interval;
+	
+	/**
+	 * Maximum times to restart server
+	 */
+	public int max_restarts = 5;
 
 	/**
 	 * This constructor once initialized will parse the config file based on the path
@@ -303,6 +308,9 @@ public class ConfigData {
 		this.bot_help = bot.get("help");
 		this.cleanup_interval = Integer.parseInt(bot.get("cleanup_interval"));
 		this.doom_executable_path = bot.get("doom_executable_path");
+		if(bot.get("maxrestarts") != null) {
+			this.max_restarts = Integer.parseInt(bot.get("maxrestarts"));
+		}
 		if (bot.get("notice") != null)
 			this.bot_notice = bot.get("notice");
 		if (bot.get("notice_interval") != null)
