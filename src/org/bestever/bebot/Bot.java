@@ -320,7 +320,7 @@ public class Bot extends PircBot {
 	 * @param keywords String[] - array of words in message sent
 	 */
 	private void toggleAutoRestart(int level, String[] keywords) {
-		if (isAccountTypeOf(level, ADMIN, MODERATOR)) {
+		if (isAccountTypeOf(level, ADMIN, MODERATOR, OPERATOR)) {
 			if (keywords.length == 2) {
 				if (Functions.isNumeric(keywords[1])) {
 					Server s = getServer(Integer.parseInt(keywords[1]));
@@ -347,7 +347,7 @@ public class Bot extends PircBot {
 	 * @param keywords String[] - array of words in message sent
 	 */
 	private void protectServer(int level, String[] keywords) {
-		if (isAccountTypeOf(level, ADMIN, MODERATOR)) {
+		if (isAccountTypeOf(level, ADMIN, MODERATOR, OPERATOR)) {
 			if (keywords.length == 2) {
 				if (Functions.isNumeric(keywords[1])) {
 					Server s = getServer(Integer.parseInt(keywords[1]));
@@ -374,7 +374,7 @@ public class Bot extends PircBot {
 	 * @param keywords String[] - array of words in message sent
 	 */
 	private void globalBroadcast(int level, String[] keywords) {
-		if (isAccountTypeOf(level, ADMIN, MODERATOR)) {
+		if (isAccountTypeOf(level, ADMIN, MODERATOR, OPERATOR)) {
 			if (keywords.length > 1) {
 				if (servers != null) {
 					String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
@@ -400,7 +400,7 @@ public class Bot extends PircBot {
 	 * @param recipient String - who to return the message to (since this can be accessed via PM as well as channel)
 	 */
 	private void sendCommand(int level, String[] keywords, String hostname, String recipient) {
-		if (isAccountTypeOf(level, REGISTERED, MODERATOR, ADMIN)) {
+		if (isAccountTypeOf(level, REGISTERED, MODERATOR, ADMIN, OPERATOR)) {
 			if (keywords.length > 2) {
 				if (Functions.isNumeric(keywords[1])) {
 					int port = Integer.parseInt(keywords[1]);
@@ -519,7 +519,7 @@ public class Bot extends PircBot {
 					processQuit(userLevel);
 					break;
 				case ".rcon":
-					if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, REGISTERED))
+					if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, REGISTERED, OPERATOR))
 						sendMessage(cfg_data.irc_channel, "Please PM the bot for the rcon.");
 					break;
 				case ".reloadconfig":
@@ -532,7 +532,7 @@ public class Bot extends PircBot {
 					MySQL.saveSlot(hostname, keywords);
 					break;
 				case ".send":
-					if (isAccountTypeOf(userLevel, ADMIN, MODERATOR))
+					if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, OPERATOR))
 						sendCommand(userLevel, keywords, hostname, cfg_data.irc_channel);
 					break;
 				case ".servers":
@@ -587,7 +587,7 @@ public class Bot extends PircBot {
 			sendMessage(cfg_data.irc_channel, "Notice is: " + cfg_data.bot_notice);
 			return;
 		}
-		if (isAccountTypeOf(userLevel, ADMIN, MODERATOR)) {
+		if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, OPERATOR)) {
 			cfg_data.bot_notice = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
 			sendMessage(cfg_data.irc_channel, "New notice has been set.");
 		}
@@ -683,7 +683,7 @@ public class Bot extends PircBot {
 	 */
 	private void processGet(int userLevel, String[] keywords) {
 		logMessage(LOGLEVEL_TRIVIAL, "Displaying processGet().");
-		if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, REGISTERED)) {
+		if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, REGISTERED, OPERATOR)) {
 			if (keywords.length != 3) {
 				sendMessage(cfg_data.irc_channel, "Proper syntax: .get <port> <property>");
 				return;
@@ -710,7 +710,7 @@ public class Bot extends PircBot {
 	 */
 	public void processHost(int userLevel, String channel, String sender, String hostname, String message, boolean autoRestart, int port) {
 		logMessage(LOGLEVEL_NORMAL, "Processing the host command for " + Functions.getUserName(hostname) + " with the message \"" + message + "\".");
-		if (botEnabled || isAccountTypeOf(userLevel, ADMIN, MODERATOR)) {
+		if (botEnabled || isAccountTypeOf(userLevel, ADMIN, MODERATOR, OPERATOR)) {
 			if (isAccountTypeOf(userLevel, REGISTERED)) {
 				int slots = MySQL.getMaxSlots(hostname);
 				int userServers;
@@ -755,7 +755,7 @@ public class Bot extends PircBot {
 		}
 
 		// Registered can only kill their own servers
-		if (isAccountTypeOf(userLevel, REGISTERED)) {
+		if (isAccountTypeOf(userLevel, REGISTERED, OPERATOR)) {
 			if (Functions.isNumeric(keywords[1])) {
 				Server server = getServer(Integer.parseInt(keywords[1]));
 				if (server != null) {
@@ -774,7 +774,7 @@ public class Bot extends PircBot {
 			} else
 				sendMessage(cfg_data.irc_channel, "Improper port number.");
 		// Admins/mods can kill anything
-		} else if (isAccountTypeOf(userLevel, ADMIN, MODERATOR)) {
+		} else if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, OPERATOR)) {
 			killServer(keywords[1]); // Can pass string, will process it in the method safely if something goes wrong
 		}
 	}
@@ -785,7 +785,7 @@ public class Bot extends PircBot {
 	 */
 	private void processKillAll(int userLevel) {
 		logMessage(LOGLEVEL_IMPORTANT, "Processing killall.");
-		if (isAccountTypeOf(userLevel, ADMIN)) {
+		if (isAccountTypeOf(userLevel, ADMIN, OPERATOR)) {
 			// If we use this.servers instead of a temporary list, it will remove the servers from the list while iterating over them
 			// This will throw a concurrent modification exception
 			// As a temporary solution, we can create a temporary list that will hold the values of the real list at the time it was called
@@ -812,7 +812,7 @@ public class Bot extends PircBot {
 	 */
 	private void processKillMine(int userLevel, String hostname) {
 		logMessage(LOGLEVEL_TRIVIAL, "Processing killmine.");
-		if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, REGISTERED)) {
+		if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, REGISTERED, OPERATOR)) {
 			List<Server> servers = getUserServers(Functions.getUserName(hostname));
 			if (servers != null) {
 				ArrayList<String> ports = new ArrayList<>();
@@ -841,7 +841,7 @@ public class Bot extends PircBot {
 	 */
 	private void processKillInactive(int userLevel, String[] keywords) {
 		logMessage(LOGLEVEL_NORMAL, "Processing a kill of inactive servers.");
-		if (isAccountTypeOf(userLevel, ADMIN, MODERATOR)) {
+		if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, OPERATOR)) {
 			if (keywords.length < 2) {
 				sendMessage(cfg_data.irc_channel, "Proper syntax: .killinactive <days since> (ex: use .killinactive 3 to kill servers that haven't seen anyone for 3 days)");
 				return;
@@ -888,7 +888,7 @@ public class Bot extends PircBot {
 	private void processOff(int userLevel) {
 		logMessage(LOGLEVEL_IMPORTANT, "An admin has disabled hosting.");
 		if (botEnabled) {
-			if (isAccountTypeOf(userLevel, ADMIN)) {
+			if (isAccountTypeOf(userLevel, ADMIN, OPERATOR)) {
 				botEnabled = false;
 				sendMessage(cfg_data.irc_channel, "Bot disabled.");
 			}
@@ -902,7 +902,7 @@ public class Bot extends PircBot {
 	private void processOn(int userLevel) {
 		logMessage(LOGLEVEL_IMPORTANT, "An admin has re-enabled hosting.");
 		if (!botEnabled) {
-			if (isAccountTypeOf(userLevel, ADMIN)) {
+			if (isAccountTypeOf(userLevel, ADMIN, OPERATOR)) {
 				botEnabled = true;
 				sendMessage(cfg_data.irc_channel, "Bot enabled.");
 			}
@@ -935,7 +935,7 @@ public class Bot extends PircBot {
 	 * @param keywords The keywords sent
 	 */
 	private void handleQuery(int userLevel, String[] keywords) {
-		if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, REGISTERED)) {
+		if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, REGISTERED, OPERATOR)) {
 			if (keywords.length == 2) {
 				String[] ipFragment = keywords[1].split(":");
 				if (ipFragment.length == 2) {
@@ -966,13 +966,13 @@ public class Bot extends PircBot {
 	 */
 	private void processRcon(int userLevel, String[] keywords, String sender, String hostname) {
 		logMessage(LOGLEVEL_NORMAL, "Processing a request for rcon (from " + sender + ").");
-		if (isAccountTypeOf(userLevel, REGISTERED, MODERATOR, ADMIN)) {
+		if (isAccountTypeOf(userLevel, REGISTERED, MODERATOR, ADMIN, OPERATOR)) {
 			if (keywords.length == 2) {
 				if (Functions.isNumeric(keywords[1])) {
 					int port = Integer.parseInt(keywords[1]);
 					Server s = getServer(port);
 					if (s != null) {
-						if (Functions.getUserName(s.irc_hostname).equals(Functions.getUserName(hostname)) || isAccountTypeOf(userLevel, MODERATOR, ADMIN)) {
+						if (Functions.getUserName(s.irc_hostname).equals(Functions.getUserName(hostname)) || isAccountTypeOf(userLevel, MODERATOR, ADMIN, OPERATOR)) {
 							sendMessage(sender, "RCON: " + s.rcon_password);
 							sendMessage(sender, "ID: " + s.server_id);
 							sendMessage(sender, "LOG: http://static.best-ever.org/logs/" + s.server_id + ".txt");
@@ -1047,15 +1047,15 @@ public class Bot extends PircBot {
 			int userLevel = MySQL.getLevel(hostname);
 			switch (keywords[0].toLowerCase()) {
 				case ".addban":
-					if (isAccountTypeOf(userLevel, MODERATOR, ADMIN) && keywords.length > 1)
+					if (isAccountTypeOf(userLevel, MODERATOR, ADMIN, OPERATOR) && keywords.length > 1)
 						MySQL.addBan(message.split(" ")[1], Functions.implode(Arrays.copyOfRange(message.split(" "), 2, message.split(" ").length), " "), sender);
 					break;
 				case ".addstartwad":
-					if (isAccountTypeOf(userLevel, MODERATOR, ADMIN) && keywords.length > 1)
+					if (isAccountTypeOf(userLevel, MODERATOR, ADMIN, OPERATOR) && keywords.length > 1)
 						addExtraWad(Functions.implode(Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length), " "), sender);
 					break;
 				case ".delstartwad":
-					if (isAccountTypeOf(userLevel, MODERATOR, ADMIN) && keywords.length > 1)
+					if (isAccountTypeOf(userLevel, MODERATOR, ADMIN, OPERATOR) && keywords.length > 1)
 						deleteExtraWad(Functions.implode(Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length), " "), sender);
 					break;
 				case ".rcon":
@@ -1070,32 +1070,35 @@ public class Bot extends PircBot {
 						sendMessage(sender, "Incorrect syntax! Usage is: /msg " + cfg_data.irc_name + " changepw <new_password>");
 					break;
 				case ".banwad":
-					if (isAccountTypeOf(userLevel, MODERATOR, ADMIN)) {
+					if (isAccountTypeOf(userLevel, MODERATOR, ADMIN, OPERATOR)) {
 						MySQL.addWadToBlacklist(Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "), sender);
 					}
 					break;
 				case ".unbanwad":
-					if (isAccountTypeOf(userLevel, MODERATOR, ADMIN)) {
+					if (isAccountTypeOf(userLevel, MODERATOR, ADMIN, OPERATOR)) {
 						MySQL.removeWadFromBlacklist(Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "), sender);
 					}
 					break;
 				case ".delban":
-					if (isAccountTypeOf(userLevel, MODERATOR, ADMIN) && keywords.length > 1)
+					if (isAccountTypeOf(userLevel, MODERATOR, ADMIN, OPERATOR) && keywords.length > 1)
 						MySQL.delBan(message.split(" ")[1], sender);
 					break;
 				case ".msg":
-					if (isAccountTypeOf(userLevel, ADMIN, MODERATOR))
+					if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, OPERATOR))
 						messageChannel(keywords, sender);
 					break;
+				case ".action":
+					if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, OPERATOR))
+						this.sendAction(cfg_data.irc_channel, Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
 				case ".purgebans":
 					if (isAccountTypeOf(userLevel, ADMIN, MODERATOR))
 						purgeBans(keywords[1]);
 					break;
 				case ".raw":
-					if (isAccountTypeOf(userLevel, ADMIN))
+					if (isAccountTypeOf(userLevel, ADMIN, OPERATOR))
 						sendRawLine(Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
 				case ".rejoin":
-					if (isAccountTypeOf(userLevel, ADMIN))
+					if (isAccountTypeOf(userLevel, ADMIN, OPERATOR))
 						rejoinChannel();
 					break;
 				case "register":
@@ -1105,7 +1108,7 @@ public class Bot extends PircBot {
 						sendMessage(sender, "Incorrect syntax! Usage is: /msg " + cfg_data.irc_name + " register <password>");
 					break;
 				case ".send":
-					if (isAccountTypeOf(userLevel, ADMIN, MODERATOR))
+					if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, OPERATOR))
 						sendCommand(userLevel, keywords, hostname, sender);
 					break;
 				case ".shell":
