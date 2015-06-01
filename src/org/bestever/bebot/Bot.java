@@ -1149,6 +1149,8 @@ public class Bot extends PircBot {
 						}
 					} else
 						sendMessage(sender, "You are not permitted to use this command.");
+					
+					break;
 				case ".terminate":
 					if (isAccountTypeOf(userLevel, OPERATOR)) {
 						if (System.currentTimeMillis() / 1000 > (terminateTimestamp / 1000) + 5) {
@@ -1173,6 +1175,8 @@ public class Bot extends PircBot {
 						
 					} else
 						sendMessage(sender, "You are not permitted to use this command.");
+					
+					break;
 				default:
 					break;
 			}
