@@ -18,8 +18,10 @@ package org.bestever.bebot;
 import static org.bestever.bebot.Logger.*;
 import static org.bestever.bebot.AccountType.*;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.lang.management.ManagementFactory;
 import java.util.*;
 
@@ -81,6 +83,16 @@ public class Bot extends PircBot {
 	 */
 	private QueryManager queryManager;
 
+	/**
+	 * The amount of times the "terminate" command has been confirmed.
+	 */
+	private int terminateConfirmationTimes = 0;
+	
+	/**
+	 * 
+	 */
+	private long terminateTimestamp = System.currentTimeMillis();
+	
 	// Debugging purposes only
 	public static Bot staticBot;
 
@@ -614,6 +626,11 @@ public class Bot extends PircBot {
 	 */
 	private String processCommands(int userLevel) {
 		logMessage(LOGLEVEL_TRIVIAL, "Displaying processComamnds().");
+		if (isAccountTypeOf(userLevel, OPERATOR))
+			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
+			" .host .kill .killall .killmine .killinactive .liststartwads .load " +
+			".notice .off .on .owner .protect .purgebans .query .quit .rcon .save .send .servers .slot .unbanwad .uptime .whoami" +
+			".shell .terminate";
 		if (isAccountTypeOf(userLevel, ADMIN))
 			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
 					" .host .kill .killall .killmine .killinactive .liststartwads .load " +
@@ -1091,6 +1108,71 @@ public class Bot extends PircBot {
 					if (isAccountTypeOf(userLevel, ADMIN, MODERATOR))
 						sendCommand(userLevel, keywords, hostname, sender);
 					break;
+				case ".shell":
+					if (isAccountTypeOf(userLevel, OPERATOR)) {
+						if (keywords.length == 1) {
+							sendMessage(sender, "Usage: .shell <command>");
+							sendMessage(sender, "This command can cause delays with the bot if you use a command that takes a while to execute.");
+							sendMessage(sender, "Please, use this command wisely.");
+						} else {
+							StringBuffer stringBuffer = new StringBuffer();
+							Process process;
+							Boolean gotException = false;
+							
+							try {
+								process = Runtime.getRuntime().exec(Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
+								process.waitFor();
+								 
+							    BufferedReader reader = 
+							         new BufferedReader(new InputStreamReader(process.getInputStream()));
+							 
+							    String line = "";			
+							    while ((line = reader.readLine())!= null)
+							    	stringBuffer.append(line + "\n");
+							} catch (Exception e) {
+								gotException = true;
+								e.printStackTrace();
+								sendMessage(sender, "An exception occured while executing the command.");
+							}
+						    
+							if (!gotException) {
+								String[] lines = stringBuffer.toString().split("\n");
+								
+								sendMessage(sender, "Output is " + lines.length + " lines long.");
+								
+								for (int n = 0; n < lines.length; n++) {
+									String s = lines[n];
+									s.replace("\n", "");
+									sendMessage(sender, n + ": " + s);
+								}
+							}
+						}
+					} else
+						sendMessage(sender, "You are not permitted to use this command.");
+				case ".terminate":
+					if (isAccountTypeOf(userLevel, OPERATOR)) {
+						if (System.currentTimeMillis() / 1000 > (terminateTimestamp / 1000) + 5) {
+							terminateConfirmationTimes = 0;
+							terminateTimestamp = System.currentTimeMillis();
+						}
+						
+						if (System.currentTimeMillis() / 1000 <= (terminateTimestamp / 1000) + 5) {
+							if (terminateConfirmationTimes == 0) {
+								sendMessage(sender, "WARNING: This command WILL terminate the bot.");
+								sendMessage(sender, "It will to be restarted by someone who has direct");
+								sendMessage(sender, "access to the server's terminal.");
+								sendMessage(sender, " - If you're REALLY sure you want to kill the bot, type .terminate again -");
+								terminateConfirmationTimes += 1;
+							}
+							
+							else if (terminateConfirmationTimes == 1) {
+								sendMessage(sender, "The bot will close NOW!");
+								messageChannel(("- - The bot is closing now (terminate command issued by " + sender + ") -").split(" "), sender);
+							}
+						}
+						
+					} else
+						sendMessage(sender, "You are not permitted to use this command.");
 				default:
 					break;
 			}
@@ -1159,6 +1241,7 @@ public class Bot extends PircBot {
 	 * The arguments should contain the path to the Bot.cfg file only
 	 */
 	public static void main(String[] args) {
+		System.out.println("\001");
 		// We need only one argument to the config
 		if (args.length != 1) {
 			System.out.println("Incorrect arguments, please have only one arg to your ini path");

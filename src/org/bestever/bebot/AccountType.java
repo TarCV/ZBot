@@ -20,11 +20,36 @@ public class AccountType {
 	/**
 	 * Below are the bitmask permissions for userroups
 	 **/
+	
+	/**
+	 * Guests are users who are not logged into BestBot or NickServ.
+	 */
 	public static final int GUEST = 0; // 0
+	
+	/**
+	 * Normal users.
+	 */
 	public static final int REGISTERED = 1; // 1
+	
+	/**
+	 * A moderator who has access to some more commands.
+	 */
 	public static final int MODERATOR = 1 << 1; // 2
+	
+	/**
+	 * <code>MODERATOR</code> with more power.
+	 */
 	public static final int ADMIN = 1 << 2; // 4
+	
+	/**
+	 * Can access other people's RCon passwords.
+	 */
 	public static final int RCON = 1 << 3; // 8
+	
+	/**
+	 * <code>ADMIN</code> but has permission to use .shell and .terminate
+	 */
+	public static final int OPERATOR = 1 << 4;
 	
 	/**
 	 * To check for different masks, this method searches to see if you contain one of them.
