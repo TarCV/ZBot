@@ -1170,6 +1170,8 @@ public class Bot extends PircBot {
 							else if (terminateConfirmationTimes == 1) {
 								sendMessage(sender, "The bot will close NOW!");
 								messageChannel(("- - The bot is closing now (terminate command issued by " + sender + ") -").split(" "), sender);
+								quitServer("Killed by " + sender);
+								System.exit(1);
 							}
 						}
 						
