@@ -1092,7 +1092,7 @@ public class Bot extends PircBot {
 						this.sendAction(cfg_data.irc_channel, Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
 					break;
 				case ".purgebans":
-					if (isAccountTypeOf(userLevel, ADMIN, MODERATOR))
+					if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, OPERATOR))
 						purgeBans(keywords[1]);
 					break;
 				case ".raw":
