@@ -391,7 +391,7 @@ public class Server {
 					String[] wadArray2 = addWads(m.group(2));
 					if (wadArray2.length > 0) {
 						for (String wad : wadArray2)
-							server.optwads.add(wad);
+							if(!server.optwads.contains(wad)) server.optwads.add(wad);
 					}
 					if (!MySQL.checkHashes(server.optwads.toArray(new String[wadArray2.length])))
 						return;
