@@ -328,6 +328,7 @@ public class ServerProcess extends Thread {
 
 			// Auto-restart the server if enabled, and only if successfully started
 			if (server.auto_restart && server.port != 0 && this.restarts < cfg_data.max_restarts) {
+				server.bot.sendDebugMessage("Attempting to auto-restart port " + server.port);
 				this.restarts++;
 				server.temp_port = server.port;
 				server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Server crashed! Attempting to restart server...");
@@ -335,18 +336,28 @@ public class ServerProcess extends Thread {
 			}
 
 		} catch (Exception e) {
+			StackTraceElement[] trace = e.getStackTrace();
+			for (StackTraceElement element : trace)
+				server.bot.sendDebugMessage("TRACE - " + element.toString());
+			
 			e.printStackTrace();
 		} finally {
 			try {
 				if (bw != null)
 					bw.close();
 			} catch (Exception e) {
+				StackTraceElement[] trace = e.getStackTrace();
+				for (StackTraceElement element : trace)
+					server.bot.sendDebugMessage("TRACE - " + element.toString());
 				e.printStackTrace();
 			}
 			try {
 				if (br != null)
 					br.close();
 			} catch (Exception e) {
+				StackTraceElement[] trace = e.getStackTrace();
+				for (StackTraceElement element : trace)
+					server.bot.sendDebugMessage("TRACE - " + element.toString());
 				e.printStackTrace();
 			}
 		}

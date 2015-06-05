@@ -95,6 +95,8 @@ public class Bot extends PircBot {
 	
 	// Debugging purposes only
 	public static Bot staticBot;
+	
+	private Boolean debugMode = false;
 
 	/**
 	 * Set the bot up with the constructor
@@ -549,6 +551,14 @@ public class Bot extends PircBot {
 					break;
 				case ".whoami":
 					sendMessage(cfg_data.irc_channel, getLoggedIn(hostname, userLevel));
+					break;
+				case ".debug":
+					if (debugMode)
+						debugMode = false;
+					else
+						debugMode = true;
+					
+					sendMessage(cfg_data.irc_channel, "Debug mode is now " + (debugMode ? "en" : "dis") + "abled.");
 					break;
 				default:
 					break;
@@ -1227,6 +1237,10 @@ public class Bot extends PircBot {
 		sendMessage(cfg_data.irc_channel, msg);
 	}
 
+	public void sendDebugMessage(String message) {
+		if (debugMode)
+			sendMessage(cfg_data.irc_channel, "DEBUG " + message);
+	}
 	/**
 	 * Called when the bot is disconnected
 	 * Ideally, attempt to reconnect
