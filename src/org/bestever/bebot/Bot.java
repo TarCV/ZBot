@@ -462,10 +462,6 @@ public class Bot extends PircBot {
 				case ".cpu":
 					sendMessage(cfg_data.irc_channel, String.valueOf(ManagementFactory.getOperatingSystemMXBean().getSystemLoadAverage()));
 					break;
-				case ".disconnect":
-					if (isAccountTypeOf(userLevel, ADMIN))
-						this.disconnect();
-					break;
 				case ".file":
 					processFile(keywords, channel);
 					break;
