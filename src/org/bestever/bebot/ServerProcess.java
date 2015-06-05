@@ -205,6 +205,7 @@ public class ServerProcess extends Thread {
 	 */
 	@Override
 	public void run() {
+		server.bot.sendDebugMessage("Attempting to start server.");
 		String portNumber = ""; // This will hold the port number
 		File logFile, banlist, whitelist, adminlist;
 		String strLine, dateNow;
@@ -226,6 +227,7 @@ public class ServerProcess extends Thread {
 			if (!adminlist.exists())
 				adminlist.createNewFile();
 
+			server.bot.sendDebugMessage("Building process.");
 			// Set up the server
 			ProcessBuilder pb = new ProcessBuilder(serverRunCommands.toArray(new String[serverRunCommands.size()]));
 			// Redirect stderr to stdout
@@ -277,6 +279,7 @@ public class ServerProcess extends Thread {
 
 				// If we see this, the server started
 				if (strLine.equalsIgnoreCase("UDP Initialized.")) {
+					server.bot.sendDebugMessage("Found \"UDP Initialized.\" in server output. Assuming the server started.");
 					System.out.println(strLine);
 					server.bot.servers.add(server);
 					server.bot.sendMessage(server.irc_channel, "Server started successfully on port " + server.port + "!");
@@ -308,6 +311,7 @@ public class ServerProcess extends Thread {
 				bw.flush();
 			}
 
+			server.bot.sendDebugMessage("Server possibly stopped.");
 			// Handle cleanup
 			dateNow = formatter.format(Calendar.getInstance().getTime());
 			long end = System.currentTimeMillis();
