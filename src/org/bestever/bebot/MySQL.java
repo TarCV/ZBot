@@ -597,7 +597,7 @@ public class MySQL {
 			if (Functions.isNumeric(words[1])) {
 				int slot = Integer.parseInt(words[1]);
 				if (slot > 0 && slot < 11) {
-					String query = "SELECT `serverstring`,`slot` FROM `server`.`save` WHERE `slot` = ? && `username` = ?";
+					String query = "SELECT `serverstring`,`slot` FROM `" + mysql_db +"`.`save` WHERE `slot` = ? && `username` = ?";
 					try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
 						pst.setInt(1, slot);
 						pst.setString(2, Functions.getUserName(hostname));
