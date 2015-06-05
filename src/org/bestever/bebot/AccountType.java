@@ -49,7 +49,7 @@ public class AccountType {
 	/**
 	 * <code>ADMIN</code> but has permission to use .shell and .terminate
 	 */
-	public static final int OPERATOR = 1 << 4;
+	public static final int OPERATOR = 1 << 4; // 16
 	
 	/**
 	 * To check for different masks, this method searches to see if you contain one of them.

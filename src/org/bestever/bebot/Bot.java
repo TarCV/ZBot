@@ -624,7 +624,7 @@ public class Bot extends PircBot {
 	 * @return whether the user is logged in or not
 	 */
 	private String getLoggedIn(String hostname, int level) {
-		if (isAccountTypeOf(level, REGISTERED))
+		if (isAccountTypeOf(level, REGISTERED, MODERATOR, ADMIN, OPERATOR))
 			return "You are logged in as " + Functions.getUserName(hostname);
 		else
 			return "You are not logged in or do not have an account with BE. Please visit http://www.best-ever.org/ for instructions on how to register";
@@ -1266,7 +1266,6 @@ public class Bot extends PircBot {
 	 * The arguments should contain the path to the Bot.cfg file only
 	 */
 	public static void main(String[] args) {
-		System.out.println("\001");
 		// We need only one argument to the config
 		if (args.length != 1) {
 			System.out.println("Incorrect arguments, please have only one arg to your ini path");
