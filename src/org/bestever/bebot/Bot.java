@@ -719,7 +719,7 @@ public class Bot extends PircBot {
 		logMessage(LOGLEVEL_NORMAL, "Processing the host command for " + Functions.getUserName(hostname) + " with the message \"" + message + "\".");
 		if (botEnabled || isAccountTypeOf(userLevel, ADMIN, MODERATOR, OPERATOR)) {
 			if (isAccountTypeOf(userLevel, REGISTERED, ADMIN, MODERATOR, OPERATOR)) {
-				autoRestart = (message.contains("autorestart=true"));
+				autoRestart = (message.contains("autorestart=true") || message.contains("autorestart=on"));
 				int slots = MySQL.getMaxSlots(hostname);
 				int userServers;
 				if (getUserServers(Functions.getUserName(hostname)) == null) userServers = 0;
