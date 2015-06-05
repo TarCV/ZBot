@@ -517,9 +517,6 @@ public class Bot extends PircBot {
 				case ".query":
 					handleQuery(userLevel, keywords);
 					break;
-				case ".quit":
-					processQuit(userLevel);
-					break;
 				case ".rcon":
 					if (isAccountTypeOf(userLevel, ADMIN, MODERATOR, REGISTERED, OPERATOR))
 						sendMessage(cfg_data.irc_channel, "Please PM the bot for the rcon.");
@@ -639,12 +636,12 @@ public class Bot extends PircBot {
 		if (isAccountTypeOf(userLevel, OPERATOR))
 			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
 			" .host .kill .killall .killmine .killinactive .liststartwads .load " +
-			".notice .off .on .owner .protect .purgebans .query .quit .rcon .save .send .servers .slot .unbanwad .uptime .whoami" +
-			".shell .terminate";
+			".notice .off .on .owner .protect .purgebans .query .rcon .save .send .servers .shell .slot .terminate .unbanwad " + 
+			".uptime .whoami";
 		if (isAccountTypeOf(userLevel, ADMIN))
 			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
 					" .host .kill .killall .killmine .killinactive .liststartwads .load " +
-					".notice .off .on .owner .protect .purgebans .query .quit .rcon .save .send .servers .slot .unbanwad .uptime .whoami";
+					".notice .off .on .owner .protect .purgebans .query .rcon .save .send .servers .slot .unbanwad .uptime .whoami";
 		else if (isAccountTypeOf(userLevel, MODERATOR))
 			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help .host" +
 					" .kill .killmine .killinactive .liststartwads .load " +
@@ -999,17 +996,6 @@ public class Bot extends PircBot {
 			}
 			else
 				sendMessage(sender, "Incorrect syntax! Correct syntax is .rcon <port>");
-		}
-	}
-
-	/**
-	 * Invoking this command terminates the bot completely
-	 * @param userLevel The user's bitmask level
-	 */
-	private void processQuit(int userLevel) {
-		logMessage(LOGLEVEL_CRITICAL, "Requested bot termination. Shutting down program.");
-		if (isAccountTypeOf(userLevel, ADMIN)) {
-			System.exit(0);
 		}
 	}
 
