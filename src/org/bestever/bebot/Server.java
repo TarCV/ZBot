@@ -586,6 +586,7 @@ public class Server {
 			case "tnt.wad":
 			case "heretic.wad":
 			case "hexen.wad":
+			case "hexdd.wad":
 			case "strife1.wad":
 			case "doom1.wad":
 			case "harmony.wad":
