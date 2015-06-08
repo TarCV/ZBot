@@ -330,6 +330,7 @@ public class ServerProcess extends Thread {
 			// Remove from the Linked List
 			server.bot.removeServerFromLinkedList(this.server);
 
+            server.bot.sendDebugMessage("autorestart check now");
 			// Auto-restart the server if enabled, and only if successfully started
 			if (server.auto_restart && server.port != 0 && this.restarts < cfg_data.max_restarts) {
 				server.bot.sendDebugMessage("Attempting to auto-restart port " + server.port);
