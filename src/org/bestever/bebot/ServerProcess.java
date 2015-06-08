@@ -111,7 +111,7 @@ public class ServerProcess extends Thread {
 		String key = MySQL.createWadPage(Functions.implode(this.server.wads, ","));
 
 		// Add the custom page to sv_website to avoid large wad list lookups
-		addParameter("+sv_website", "http://www.best-ever.org/wadpage?key=" + key);
+		addParameter("+sv_website", "http://exciter.allfearthesentinel.net/wadpage?key=" + key);
 
 		if (server.iwad != null)
 			addParameter("-iwad", server.bot.cfg_data.bot_iwad_directory_path + server.iwad);
@@ -291,7 +291,7 @@ public class ServerProcess extends Thread {
 					String ip = keywords[keywords.length-1].split(":")[0];
 					String pIP;
 					if ((pIP = MySQL.checkBanned(ip)) != null)
-						server.in.println("addban " + pIP + " perm \"You have been banned from Best Ever. If you feel that this is an error, please visit irc.zandronum.com #bestever.\"");
+						server.in.println("addban " + pIP + " perm \"You have been banned from TSPG Exciter. If you feel that this is an error, please visit irc.zandronum.com #bestever.\"");
 				}
 
 				// Check for RCON password changes
@@ -330,7 +330,7 @@ public class ServerProcess extends Thread {
 			// Remove from the Linked List
 			server.bot.removeServerFromLinkedList(this.server);
 
-            server.bot.sendDebugMessage("autorestart check now");
+            server.bot.sendDebugMessage("Hitting the autorestart check now!");
 			// Auto-restart the server if enabled, and only if successfully started
 			if (server.auto_restart && server.port != 0 && this.restarts < cfg_data.max_restarts) {
 				server.bot.sendDebugMessage("Attempting to auto-restart port " + server.port);
@@ -338,7 +338,9 @@ public class ServerProcess extends Thread {
 				server.temp_port = server.port;
 				server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Server crashed! Attempting to restart server...");
 				server.bot.processHost(server.user_level, server.bot.cfg_data.irc_channel, server.sender, server.irc_hostname, server.host_command, true, server.port);
-			}
+			} else {
+                server.bot.sendDebugMessage("Check failed. autorestart=" + (server.auto_restart ? "true" : "false") + "; port=" + server.port + "; restarts=" + this.restarts + "/" + cfg_data.max_restarts);
+            }
 
 		} catch (Exception e) {
 			StackTraceElement[] trace = e.getStackTrace();
