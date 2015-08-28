@@ -95,7 +95,7 @@ public class ServerProcess extends Thread {
 		serverRunCommands = new ArrayList<String>();
 
 		// This must always be first (we may also want a custom binary, so do that here as well)
-		serverRunCommands.add(server.executableType);
+		serverRunCommands.add(server.version.path);
 
 		// Check if we have a temporary port
 		// This will try to host the server on the same port as before

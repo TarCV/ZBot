@@ -206,6 +206,11 @@ public class Server {
 	public String rcon_password;
 
 	/**
+	 * The Version of Zandronum this server uses.
+	 */
+	public Version version;
+	
+	/**
 	 * If there's an error with processing of numbers, return this
 	 */
 	public static final int FLAGS_ERROR = 0xFFFFFFFF;
@@ -214,7 +219,6 @@ public class Server {
 	 * This is the time of a day in milliseconds
 	 */
 	public static final long DAY_MILLISECONDS = 1000 * 60 * 60 * 24;
-
 	/**
 	 * Default constructor for building a server
 	 */
@@ -273,24 +277,16 @@ public class Server {
 				case "autorestart":
 					server.auto_restart = handleTrue(m.group(2));
 					break;
-				case "binary":
-					switch (m.group(2).toLowerCase())
-					{
-						case "zandronum":
-							// If they specify the default, continue on like normal
-							break;
-						case "kpatch":
-							server.executableType = botReference.cfg_data.bot_executable_kpatch;
-							break;
-						case "developer":
-							server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Important: Developer repositories may be completely broken, will not run, or have many bugs. Use at your own risk! If it keeps crashing, it's probably the repository and there is nothing we can do to solve that.");
-							server.executableType = botReference.cfg_data.bot_executable_developerrepository;
-							break;
-						default:
-							server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Invalid binary (" + m.group(2) + "); please use 'kpatch' or 'developer' to use custom binaries (ex: binary=kpatch), or remove it to use default Zandronum.");
-							return;
+				case "version":
+					String wanted = m.group(2).toLowerCase();
+					Version v = server.bot.versionParser.getVersion(wanted);
+					if (v != null) {
+						server.version = v;
+					} else {
+						server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Invalid version.");
+						return;
 					}
-					break;
+						
 				case "buckshot":
 					server.buckshot = handleTrue(m.group(2));
 					break;

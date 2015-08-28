@@ -97,6 +97,8 @@ public class Bot extends PircBot {
 	public static Bot staticBot;
 	
 	private Boolean debugMode = false;
+	
+	public VersionParser versionParser;
 
 	/**
 	 * Set the bot up with the constructor
@@ -109,6 +111,9 @@ public class Bot extends PircBot {
 
 		// Set up the logger
 		Logger.setLogFile(cfg_data.bot_logfile);
+		
+		// Parse versions.json
+		versionParser = new VersionParser(cfgfile.filepath);
 
 		// Set up the bot and join the channel
 		logMessage(LOGLEVEL_IMPORTANT, "Initializing BestBot v" + cfg_data.irc_version);
@@ -1267,7 +1272,7 @@ public class Bot extends PircBot {
 			e.printStackTrace();
 			return;
 		}
-
+		
 		// Start the bot
 		Bot b = new Bot(cfg_data);
 		b.config_file = args[0];
