@@ -1,0 +1,2 @@
+# make linguist ignore the JSON stuff as its not ours
+src/org/json/* linguist-vendored
