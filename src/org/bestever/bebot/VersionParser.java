@@ -14,6 +14,8 @@ import org.json.*; // I'll only use 2 classes anyway
 public class VersionParser {
 	public HashMap<String, Version> versions;
 	
+	public Version defaultVersion = null;
+	
 	public VersionParser(String configPath) {
 		versions = new HashMap<String, Version>();
 		
@@ -47,6 +49,9 @@ public class VersionParser {
 				boolean isDefault = object.getBoolean("default");
 				Version v = new Version(name, path, isDefault, desc);
 				versions.put(name, v);
+				
+				if (v.isDefault && defaultVersion != null)
+					defaultVersion = v;
 			}
 			
 		} catch (Exception e) {

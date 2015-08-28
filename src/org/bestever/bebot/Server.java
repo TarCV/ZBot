@@ -265,7 +265,7 @@ public class Server {
 		// The bot structure of using the executable has changed, we will set
 		// it to default here at the very beginning to the normal exe, but it
 		// can be changed later on in the code with a binary=... flag
-		server.executableType = botReference.cfg_data.bot_executable;
+		server.version = botReference.versionParser.defaultVersion;
 
 		// Regex that will match key=value, as well as quotes key="value"
 		Pattern regex = Pattern.compile("(\\w+)=\"*((?<=\")[^\"]+(?=\")|([^\\s]+))\"*");
@@ -286,6 +286,8 @@ public class Server {
 						server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Invalid version.");
 						return;
 					}
+					
+					break;
 						
 				case "buckshot":
 					server.buckshot = handleTrue(m.group(2));
