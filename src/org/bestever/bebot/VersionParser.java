@@ -13,12 +13,13 @@ import org.json.*; // I'll only use 2 classes anyway
  */
 public class VersionParser {
 	public HashMap<String, Version> versions;
-	
+	public ArrayList<Version> list;
 	public Version defaultVersion = null;
 	
 	public VersionParser(String configPath) {
 		versions = new HashMap<String, Version>();
-		
+		list = new ArrayList<Version>();
+
 		// Find where our versions.json is, first thing
 		File cfgFile = new File(configPath);
 		String cfgDir = cfgFile.getParent();
@@ -49,11 +50,18 @@ public class VersionParser {
 				boolean isDefault = object.getBoolean("default");
 				Version v = new Version(name, path, isDefault, desc);
 				versions.put(name, v);
-				
+				list.add(v);
+
 				if (v.isDefault && defaultVersion != null)
 					defaultVersion = v;
 			}
-			
+
+
+			if (defaultVersion == null) {
+				defaultVersion = list.get(0);
+				System.out.println("No default version specified, using first version read.");
+			}
+
 		} catch (Exception e) {
 			System.err.println("An exception has occured while parsing versions.json:");
 			System.err.println();
