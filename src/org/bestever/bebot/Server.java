@@ -767,7 +767,7 @@ public class Server {
 			case "compatflags":
 				return "compatflags: " + Integer.toString(this.compatflags);
 			case "compatflags2":
-			case "zacompatflags"
+			case "zacompatflags":
 				return "compatflags2: " + Integer.toString(this.compatflags2);
 			case "config":
 			case "cfg":
