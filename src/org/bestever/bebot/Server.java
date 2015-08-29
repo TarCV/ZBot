@@ -300,6 +300,7 @@ public class Server {
 					}
 					break;
 				case "compatflags2":
+				case "zacompatflags":
 					server.compatflags2 = handleGameFlags(m.group(2));
 					if (server.compatflags == FLAGS_ERROR) {
 						server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Problem with parsing compatflags2");
@@ -332,6 +333,7 @@ public class Server {
 					}
 					break;
 				case "dmflags3":
+				case "zadmflags":
 					server.dmflags3 = handleGameFlags(m.group(2));
 					if (server.dmflags3 == FLAGS_ERROR) {
 						server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Problem with parsing dmflags3");
@@ -765,6 +767,7 @@ public class Server {
 			case "compatflags":
 				return "compatflags: " + Integer.toString(this.compatflags);
 			case "compatflags2":
+			case "zacompatflags"
 				return "compatflags2: " + Integer.toString(this.compatflags2);
 			case "config":
 			case "cfg":
@@ -781,6 +784,7 @@ public class Server {
 			case "dmflags2":
 				return "dmflags2 " + Integer.toString(this.dmflags2);
 			case "dmflags3":
+			case "zadmflags":
 				return "dmflags3 " + Integer.toString(this.dmflags3);
 			case "gamemode":
 			case "gametype":
