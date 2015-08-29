@@ -47,8 +47,9 @@ public class VersionParser {
 				String name = object.getString("name");
 				String path = object.getString("path");
 				String desc = object.getString("description");
+				String data = object.getString("data");
 				boolean isDefault = object.getBoolean("default");
-				Version v = new Version(name, path, isDefault, desc);
+				Version v = new Version(name, path, isDefault, desc, data);
 				versions.put(name, v);
 				list.add(v);
 

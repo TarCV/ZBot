@@ -10,14 +10,16 @@ public class Version {
 	protected String path;
 	protected boolean isDefault;
 	protected String description;
-	
-	public Version(String name, String path, boolean isDefault, String description) {
+	protected String data;
+
+	public Version(String name, String path, boolean isDefault, String description, String data) {
 		setName(name);
 		setPath(path);
 		setDefault(isDefault);
 		setDescription(description);
+		setData(data);
 	}
-	
+
 	protected void setName(String value) {
 		name = value;
 	}
@@ -32,5 +34,9 @@ public class Version {
 	
 	protected void setDescription(String value) {
 		description = value;
+	}
+
+	protected void setData(String value) {
+		data = value;
 	}
 }
