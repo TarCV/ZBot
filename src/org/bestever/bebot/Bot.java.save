@@ -455,10 +455,6 @@ public class Bot extends PircBot {
 			// Perform function based on input (note: login is handled by the MySQL function/class); also mostly in alphabetical order for convenience
 			int userLevel = MySQL.getLevel(hostname);
 			switch (keywords[0].toLowerCase()) {
-				case ".versions":
-					for (Version v : versionParser.list)
-						sendMessage(cfg_data.irc_channel, String.format("%s %s - %s", v.name, (v.isDefault ? "(default)" : ""), v.description));
-					break;
 				case ".autorestart":
 					toggleAutoRestart(userLevel, keywords);
 					break;
