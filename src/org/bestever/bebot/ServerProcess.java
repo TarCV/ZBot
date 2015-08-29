@@ -118,8 +118,9 @@ public class ServerProcess extends Thread {
 
 		if (server.enable_skulltag_data) {
 			// Add the skulltag_* data files first since they need to be accessed by other wads
+			int z = 0;
 			for (String stwad : server.version.data.split(" "))
-				server.wads.add(stwad);
+				server.wads.add(z++, stwad);
 		}
 
 		// Add the extra wads and clean duplicates
