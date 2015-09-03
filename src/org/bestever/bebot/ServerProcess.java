@@ -345,6 +345,7 @@ public class ServerProcess extends Thread {
 
 		} catch (Exception e) {
 			StackTraceElement[] trace = e.getStackTrace();
+			server.bot.sendDebugMessage("EXCEPTION - " + e.getMessage());
 			for (StackTraceElement element : trace)
 				server.bot.sendDebugMessage("TRACE - " + element.toString());
 			
