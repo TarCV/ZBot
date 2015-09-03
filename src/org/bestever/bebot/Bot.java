@@ -555,12 +555,10 @@ public class Bot extends PircBot {
 					sendMessage(cfg_data.irc_channel, getLoggedIn(hostname, userLevel));
 					break;
 				case ".debug":
-					if (debugMode)
-						debugMode = false;
-					else
-						debugMode = true;
-					
-					sendMessage(cfg_data.irc_channel, "Debug mode is now " + (debugMode ? "en" : "dis") + "abled.");
+					if (isAccountTypeOf(level, MODERATOR)) {
+						debugMode = !debugMode;
+						sendMessage(cfg_data.irc_channel, "Debug mode is now " + (debugMode ? "en" : "dis") + "abled.");
+					}
 					break;
 				default:
 					break;
