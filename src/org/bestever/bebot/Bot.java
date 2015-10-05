@@ -825,7 +825,7 @@ public class Bot extends PircBot {
 	}
 
 	private void processKillVersion(int userlevel, String[] keywords) {
-		if (isAccountTypeOf(userLevel, ADMIN)) {
+		if (isAccountTypeOf(userlevel, ADMIN)) {
 			if (keywords.length != 2) {
 				sendMessage(cfg_data.irc_channel, "Invalid amount of arguments. Syntax: .killversion <version>");
 				return;
@@ -852,7 +852,7 @@ public class Bot extends PircBot {
 				killed++;
 			}
 
-			bot.sendMessage(cfg_data.irc_channel, "Killed a total of " + killed + " servers.");
+			sendMessage(cfg_data.irc_channel, "Killed a total of " + killed + " servers.");
 		}
 	}
 	/**
