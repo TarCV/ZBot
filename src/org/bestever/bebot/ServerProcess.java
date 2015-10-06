@@ -283,7 +283,7 @@ public class ServerProcess extends Thread {
 					server.bot.sendDebugMessage("Found \"UDP Initialized.\" in server output. Assuming the server started.");
 					System.out.println(strLine);
 					server.bot.servers.add(server);
-					server.bot.vSHashmap.put(server.version.name, server);
+					server.bot.vSHashmap.get(server.version.name).add(server);
 					server.bot.sendMessage(server.irc_channel, "Server started successfully on port " + server.port + "!");
 					server.bot.sendMessage(server.sender, "To kill your server, in the channel " + server.bot.cfg_data.irc_channel + ", type .killmine to kill all of your servers, or .kill " + server.port + " to kill just this one.");
 				}
