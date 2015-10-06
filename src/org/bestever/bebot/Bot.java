@@ -845,7 +845,7 @@ public class Bot extends PircBot {
 			}
 
 			int killed = 0;
-			for (Server s : tempList.get(version)) {
+			for (Server s : tempList) {
 				s.hide_stop_message = true;
 				s.auto_restart = false;
 				s.killServer();
