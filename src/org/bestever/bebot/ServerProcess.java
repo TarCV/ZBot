@@ -299,6 +299,7 @@ public class ServerProcess extends Thread {
                 if (keywords[0].equals("CHAT") && server.bot.cfg_data.irc_relay) {
                     int commaIndex = strLine.indexOf(":");
 					int ircIndex = strLine.indexOf("!irc ", commaIndex);
+                    System.out.println(String.format("comma: %d | irc: %d | str: %s", commaIndex, ircIndex, strLine));
                     if (commaIndex != -1 && ircIndex == 1) {
                         String sender = strLine.substring(0, commaIndex);
                         String message = strLine.substring(ircIndex, strLine.length());
