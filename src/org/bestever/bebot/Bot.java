@@ -541,7 +541,7 @@ public class Bot extends PircBot {
 					}
 					break;
 				case ".reauth":
-					if (isAccountTypeOf(userLevel, ADMIN)) {
+					if (isAccountTypeOf(userLevel, MODERATOR)) {
 						changeNick(cfg_data.irc_name);
                         sendRawLine("NICKSERV IDENTIFY " + cfg_data.irc_pass);
 					}
@@ -653,16 +653,16 @@ public class Bot extends PircBot {
 		if (isAccountTypeOf(userLevel, OPERATOR))
 			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
 			" .host .kill .killall .killmine .killinactive .liststartwads .load " +
-			".notice .off .on .owner .protect .purgebans .query .rcon .save .send .servers .shell .slot .terminate .unbanwad " +
+			".notice .off .on .owner .protect .purgebans .query .rcon .reauth .save .send .servers .shell .slot .terminate .unbanwad " +
 			".uptime .whoami";
 		else if (isAccountTypeOf(userLevel, ADMIN))
 			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
 					" .host .kill .killall .killmine .killinactive .liststartwads .load " +
-					".notice .off .on .owner .protect .purgebans .query .rcon .save .send .servers .slot .unbanwad .uptime .whoami";
+					".notice .off .on .owner .protect .purgebans .query .rcon .reauth .save .send .servers .slot .unbanwad .uptime .whoami";
 		else if (isAccountTypeOf(userLevel, MODERATOR))
 			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help .host" +
 					" .kill .killmine .killinactive .liststartwads .load " +
-					".notice .owner .protect .purgebans .query .rcon .save .send .servers .slot .unbanwad .uptime .whoami";
+					".notice .owner .protect .purgebans .query .rcon .reauth .save .send .servers .slot .unbanwad .uptime .whoami";
 		else if (isAccountTypeOf(userLevel, REGISTERED))
 			return ".commands .cpu .file .get .help .host .kill .killmine .load .owner .query .rcon .save .servers .slot .uptime .whoami";
 		else
