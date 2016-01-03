@@ -542,11 +542,8 @@ public class Bot extends PircBot {
 					break;
 				case ".reauth":
 					if (isAccountTypeOf(userLevel, ADMIN)) {
-                        int oldmd = getMessageDelay();
-                        setMessageDelay(0);
 						changeNick(cfg_data.irc_name);
-                        sendRaw("NICKSERV IDENTIFY " + cfg_data.irc_pass);
-                        setMessageDelay(oldmd);
+                        sendRawLine("NICKSERV IDENTIFY " + cfg_data.irc_pass);
 					}
 					break;
 				case ".save":
