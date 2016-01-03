@@ -303,7 +303,7 @@ public class ServerProcess extends Thread {
                         String sender = strLine.substring(0, commaIndex);
                         String message = strLine.substring(ircIndex, strLine.length());
 
-                        bot.sendMessage(server.irc_channel, server.port + " | " + sender + ":" + message);
+                        server.bot.sendMessage(server.irc_channel, server.port + " | " + sender + ":" + message);
                     }
 				}
 
