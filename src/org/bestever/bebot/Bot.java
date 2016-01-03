@@ -540,6 +540,15 @@ public class Bot extends PircBot {
 						sendMessage(cfg_data.irc_channel, "Configuration file has been successfully reloaded.");
 					}
 					break;
+				case ".reauth":
+					if (isAccountTypeOf(userLevel, ADMIN)) {
+                        int oldmd = getMessageDelay();
+                        setMessageDelay(0);
+						changeNick(cfg_data.irc_name);
+                        sendRaw("NICKSERV IDENTIFY " + cfg_data.irc_pass);
+                        setMessageDelay(oldmd);
+					}
+					break;
 				case ".save":
 					MySQL.saveSlot(hostname, keywords);
 					break;
