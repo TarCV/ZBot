@@ -281,8 +281,8 @@ public class ConfigData {
 		this.irc_pass = irc.get("pass");
 		this.irc_port = Integer.parseInt(irc.get("port"));
 		this.irc_mask = irc.get("hostmask");
-		if (bot.get("irc_relay") != null)
-			this.irc_relay = Boolean.parseBoolean(bot.get("irc_relay"));
+		if (irc.get("irc_relay") != null)
+			this.irc_relay = Boolean.parseBoolean(irc.get("irc_relay"));
 
 		// Load the MYSQL section
 		Ini.Section mysql = ini.get("mysql");
