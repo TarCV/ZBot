@@ -301,7 +301,7 @@ public class ServerProcess extends Thread {
 					int ircIndex = strLine.indexOf("!irc ", commaIndex);
                     if (commaIndex != -1 && ircIndex == 1) {
                         String sender = strLine.substring(0, commaIndex);
-                        String message = strLine(ircIndex, strLine.length);
+                        String message = strLine.substring(ircIndex, strLine.length);
 
                         bot.sendMessage(server.irc_channel, server.port + " | " + sender + ":" + message);
                     }
