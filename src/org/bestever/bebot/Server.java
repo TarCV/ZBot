@@ -144,7 +144,7 @@ public class Server {
 	 * Contains a list of all the optional wads used by the server separated by a space
 	 */
 	public ArrayList<String> optwads;
-	
+
 	/**
 	 * Contains a list of all the wads separated by a space which will be searched for maps
 	 */
@@ -153,7 +153,7 @@ public class Server {
 	/**
 	 *  Holds the skill of the game
 	 */
-	public int skill = 5;
+	public int skill = -1;
 
 	/**
 	 * If this is true, that means skulltag data will be enabled
@@ -209,7 +209,7 @@ public class Server {
 	 * The Version of Zandronum this server uses.
 	 */
 	public Version version;
-	
+
 	/**
 	 * If there's an error with processing of numbers, return this
 	 */
@@ -286,9 +286,9 @@ public class Server {
 						server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Invalid version.");
 						return;
 					}
-					
+
 					break;
-						
+
 				case "buckshot":
 					server.buckshot = handleTrue(m.group(2));
 					break;
@@ -418,7 +418,7 @@ public class Server {
 				}
 			}
 		}
-		
+
 		// Check if the optional WADs exist
 		if (server.optwads != null) {
 			for (int i = 0; i < server.optwads.size(); i++) {
@@ -428,7 +428,7 @@ public class Server {
 				}
 			}
 		}
-		
+
 		// Now that we've indexed the string, check to see if we have what we need to start a server
 		if (server.iwad == null) {
 			server.bot.sendMessage(server.bot.cfg_data.irc_channel, "You are missing an iwad, or have specified an incorrect iwad. You can add it by appending: iwad=your_iwad");
