@@ -540,6 +540,12 @@ public class Bot extends PircBot {
 						sendMessage(cfg_data.irc_channel, "Configuration file has been successfully reloaded.");
 					}
 					break;
+				case ".reloadversions":
+					if (isAccountTypeOf(userLevel, ADMIN)) {
+						versionParser.load();
+						sendMessage(cfg_data.irc_channel, "Configuration file has been successfully reloaded.");
+					}
+					break;
 				case ".reauth":
 					if (isAccountTypeOf(userLevel, MODERATOR)) {
 						changeNick(cfg_data.irc_name);
