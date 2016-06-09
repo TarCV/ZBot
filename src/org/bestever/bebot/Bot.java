@@ -659,7 +659,7 @@ public class Bot extends PircBot {
 		if (isAccountTypeOf(userLevel, OPERATOR))
 			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
 			" .host .kill .killall .killmine .killinactive .liststartwads .load " +
-			".notice .off .on .owner .protect .purgebans .query .rcon .reauth .save .send .servers .shell .slot .terminate .unbanwad " +
+			".notice .off .on .owner .protect .purgebans .query .rcon .reauth .reloadversions .save .send .servers .shell .slot .terminate .unbanwad " +
 			".uptime .whoami";
 		else if (isAccountTypeOf(userLevel, ADMIN))
 			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
