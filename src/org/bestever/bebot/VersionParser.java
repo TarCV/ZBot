@@ -8,7 +8,7 @@ import java.util.Scanner;
 import org.json.*; // I'll only use 2 classes anyway
 
 /**
- * Parses version.json, allowing the bot to use multiple Zandronum version.
+ * Parses version.json, allowing the bot to use multiple Zandronum versions.
  * @author Sean Baggaley
  */
 public class VersionParser {
@@ -16,7 +16,14 @@ public class VersionParser {
 	public ArrayList<Version> list;
 	public Version defaultVersion = null;
 	
+	private String configPath = "";
+	
 	public VersionParser(String configPath) {
+		this.configPath = configPath;
+		load();
+	}
+	
+	public void load() {
 		versions = new HashMap<String, Version>();
 		list = new ArrayList<Version>();
 
