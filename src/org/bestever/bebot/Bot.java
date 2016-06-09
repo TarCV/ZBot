@@ -543,7 +543,7 @@ public class Bot extends PircBot {
 				case ".reloadversions":
 					if (isAccountTypeOf(userLevel, ADMIN)) {
 						versionParser.load();
-						sendMessage(cfg_data.irc_channel, "Configuration file has been successfully reloaded.");
+						sendMessage(cfg_data.irc_channel, "Versions file has been successfully reloaded.");
 					}
 					break;
 				case ".reauth":
