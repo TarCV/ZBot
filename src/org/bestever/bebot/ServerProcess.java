@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.lang.reflect.Field;
 
 /**
  * This class is specifically for running the server only and notifying the
@@ -83,7 +84,32 @@ public class ServerProcess extends Thread {
 	 */
 	public void terminateServer() {
 		server.bot.removeServerFromLinkedList(this.server);
-		proc.destroy();
+		if (getPid() != -1)  {
+			try {
+				String command = "pkill -9 -P " + getPid();
+				server.bot.sendDebugMessage("using " + command);
+				Runtime.getRuntime().exec(command);
+			} catch (Exception ex) {
+				server.bot.sendDebugMessage("using proc.destroy()");
+				proc.destroy();
+			}
+		} else {
+			server.bot.sendDebugMessage("pid == -1; using proc.destroy()");
+			proc.destroy();
+		}
+	}
+
+	public int getPid() {
+    		try {
+        		Class<?> cProcessImpl = proc.getClass();
+        		Field fPid = cProcessImpl.getDeclaredField("pid");
+        		if (!fPid.isAccessible()) {
+            			fPid.setAccessible(true);
+        		}
+        		return fPid.getInt(proc);
+    		} catch (Exception e) {
+        		return -1;
+    		}
 	}
 
 	/**
@@ -111,7 +137,7 @@ public class ServerProcess extends Thread {
 		String key = MySQL.createWadPage(Functions.implode(this.server.wads, ","));
 
 		// Add the custom page to sv_website to avoid large wad list lookups
-		addParameter("+sv_website", "http://exciter.allfearthesentinel.net/wadpage?key=" + key);
+		addParameter("+sv_website", "http://allfearthesentinel.net/wadpage?key=" + key);
 
 		if (server.iwad != null)
 			addParameter("-iwad", server.bot.cfg_data.bot_iwad_directory_path + server.iwad);
@@ -253,7 +279,7 @@ public class ServerProcess extends Thread {
 			// NOTE: As of now, BE users can still check the RCON password by accessing the control panel on the website.
 			// We'll fix this later by changing the RCON from the unique_id to a random MD5 hash
 			if (server.bot.cfg_data.bot_public_rcon || AccountType.isAccountTypeOf(server.user_level, AccountType.RCON))
-				server.bot.sendMessage(server.sender, "Your unique server ID is: " + server.server_id + ". This is your RCON password, which can be used using 'send_password "+server.server_id+"' via the in-game console. You can view your logfile at http://static.best-ever.org/logs/" + server.server_id + ".txt");
+				server.bot.sendMessage(server.sender, "Your unique server ID is: " + server.server_id + ". This is your RCON password, which can be used using 'send_password "+server.server_id+"' via the in-game console. You can view your logfile at http://static.allfearthesentinel.net/logs/" + server.server_id + ".txt");
 
 			// Process server while it outputs text
 			while ((strLine = br.readLine()) != null) {
@@ -292,7 +318,7 @@ public class ServerProcess extends Thread {
 					String ip = keywords[keywords.length-1].split(":")[0];
 					String pIP;
 					if ((pIP = MySQL.checkBanned(ip)) != null)
-						server.in.println("addban " + pIP + " perm \"You have been banned from TSPG Exciter. If you feel that this is an error, please visit irc.zandronum.com #bestever.\"");
+						server.in.println("addban " + pIP + " perm \"You have been banned from TSPG. If you feel that this is an error, please visit irc.zandronum.com #tspg-<nodename>\"");
 				}
 
                 if (keywords[0].equals("CHAT") && server.bot.cfg_data.irc_relay) {
@@ -337,7 +363,7 @@ public class ServerProcess extends Thread {
 				if (server.port != 0)
 					server.bot.sendMessage(server.irc_channel, "Server stopped on port " + server.port + "! Server ran for " + Functions.calculateTime(uptime));
 				else
-					server.bot.sendMessage(server.irc_channel, "Server was not started. This is most likely due to a wad error.");
+					server.bot.sendMessage(server.irc_channel, "Server was not started. This is most likely due to a wad error, missing required wads or requires a later game version. See the log for more details.");
 			}
 
 			// Remove from the Linked List

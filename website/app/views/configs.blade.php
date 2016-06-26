@@ -1,6 +1,10 @@
 @include ('includes.header')
 
 <div class="main-content">
+	<div class="content">
+		<b>Uploaded configs show up here.</b><br>
+		You may view them by clicking on them.
+	</div>
 	<div class="heading">Configs</div>
 	<div id="cfg-table" style="width: 90%;margin:20px auto 0 auto"></div>
 	<script>
@@ -18,7 +22,7 @@
 			],
 			@endforeach
 			]
-			$('#cfg-table').html( '<table class="table table-striped table-bordered" style="background:#EEE" id="cfgs"></table>' );
+			$('#cfg-table').html( '<table class="table table-bordered" style="background:#EEE" id="cfgs"></table>' );
 			$('#cfgs').dataTable({
 				"oLanguage": {
 					"oPaginate": {

@@ -12,7 +12,7 @@
 	{{ HTML::script('/static/js/main.js'); }}
 	<link href='http://fonts.googleapis.com/css?family=Noto+Sans' rel='stylesheet' type='text/css'>
 	<link href='http://fonts.googleapis.com/css?family=Source+Code+Pro' rel='stylesheet' type='text/css'>
-	<title>404 - Best Ever</title>
+	<title>ERRR - 404 - [TSPG] The Sentinels Playground</title>
 </head>
 <body>
 <nav class="navbar navbar-default navbar-fixed-top" role="navigation">
@@ -24,7 +24,7 @@
 				<span class="icon-bar"></span>
 				<span class="icon-bar"></span>
 			</button>
-			<a class="navbar-brand" href="/">BE</a>
+			<a class="navbar-brand" href="/">TSPG</a>
 		</div>
 		<div class="collapse navbar-collapse" id="navbar-collapse">
 			<ul class="nav navbar-nav">
@@ -55,7 +55,7 @@
 	<div class="text-center" style="font-size:36px;margin-bottom:90px;">The content you are looking for was not found.</div>
 	<footer id="footer">
 		<div class="wrap">
-			<p class="footer-text">© 2014 Best Ever<br /><a target="_BLANK" href="https://www.oblivionro.net">Powered by OblivionRO</a></p>
+			<p class="footer-text">© 2014 Best Ever (Thanks Jenova!)<br /><a target="_BLANK" href="https://www.oblivionro.net">Powered by OblivionRO</a></p>
 		</div>
 	</footer>
 </div>

@@ -19,8 +19,8 @@
 	<div class="block">
 		<div class="heading">Upload</div>
 		<div class="content">
-			Here you can upload your favorite DOOM wads, as well as configuration files. Accepted filetypes are WAD, PK3, PK7, as well as CFG for configuration files.
-			The maximum upload size is 400MB.
+			Here you can upload your favorite DOOM wads, as well as configuration files.<br>
+			Accepted filetypes are WAD, PK3, PK7, as well as CFG for configuration files. The maximum upload size is 400MB.
 		</div>
 	</div>
 
@@ -35,10 +35,9 @@
 	<div class="percent"></div>
 
 	<div id="status"></div>
-
 	<div class="heading">Latest Uploads</div>
 	<div class="content">
-		<table class="table table-striped table-bordered" style="background: #EEE">
+		<table class="table table-bordered" style="background: url('/static/img/bg.png') repeat">
 			<tr>
 				<th>Name</th>
 				<th>Size</th>
@@ -51,7 +50,7 @@
 						<td>@if (Auth::check() && Auth::user()->level > 14)
 							<a style="margin-right:10px;cursor:pointer;" class="deletable"><span class="glyphicon glyphicon-remove" id='{{{ $wad->wadname }}}'></span></a>@endif
 							<a href="/download?file={{{ urlencode($wad->wadname) }}}">{{{ $wad->wadname }}}</a>
-							<span style='margin-left:3px;font-size: 8px'><a href='/wadinfo?name={{{ urlencode($wad->wadname) }}}'>[View]</a></span></td>
+							<!--<span style='margin-left:3px;font-size: 10px'><a href='/wadinfo?name={{{ urlencode($wad->wadname) }}}'>[View]</a></span>--></td>
 						<td>{{{ $wad->size }}}</td>
 						<td>{{{ $wad->username }}}</td>
 						<td>{{{ $wad->date }}}</td>

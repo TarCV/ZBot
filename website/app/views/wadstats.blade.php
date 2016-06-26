@@ -28,7 +28,7 @@ $(document).ready(function() {
 			<tr>
 				<th>Total Wads</th>
 				<th>WAD Archive Size</th>
-				<th>WAD Downloads (Since June 1st, 2014)</th>
+				<th>WAD Downloads (Since April 15th, 2015)</th>
 			</tr>
 			<tr>
 				<td>{{{ $count }}}</td>
@@ -39,7 +39,7 @@ $(document).ready(function() {
 	</div>
 	<div class="heading">Top Downloads</div>
 	<div class="block">
-		Notice: Download statistics are calculated starting from June 1st, 2014.
+		Notice: Download statistics are calculated starting from April 15th, 2015.
 	</div>
 	<ol id="time" style="margin-top: 10px;background:#EFEFEF;border-radius:0px;margin-bottom:0px" class="breadcrumb">
 		<li><a id="all" href="#">All Time</a></li>
@@ -55,6 +55,15 @@ $(document).ready(function() {
 				<th>Downloads</th>
 			</tr>
 		</table>
+	</div>
+	<div class="heading">Server Stats</div>
+	<div class="block" style="background: rgb(240, 240, 240);">
+		<center>
+			<h3 style="color: black; padding: 10px;">Painkiller</h3>
+			<img style="vertical-align: top; padding: 10px;" src="https://munin.csnxs.uk/munin-cgi/munin-cgi-graph/allfearthesentinel.net/painkiller/cpu-week.png"/>
+			<img style="vertical-align: top; padding: 10px;" src="https://munin.csnxs.uk/munin-cgi/munin-cgi-graph/allfearthesentinel.net/painkiller/memory-week.png"/>
+			<img style="vertical-align: top; padding: 10px;" src="https://munin.csnxs.uk/munin-cgi/munin-cgi-graph/allfearthesentinel.net/painkiller/fw_packets-week.png"/>
+		</center>
 	</div>
 </div>
 

@@ -1,6 +1,10 @@
 @include ('includes.header')
 
 <div class="main-content">
+	<div class="content">
+		<b>Uploaded Files show up here.</b><br>
+		You can download them by clicking on them. 
+	</div>
 	<div class="heading">Wads</div>
 	<div id="wad-table" style="width: 90%;margin:20px auto 0 auto"></div>
 	<script>
@@ -9,10 +13,11 @@
 			@foreach ($wads as $wad)
 					@if (Auth::check() && Auth::user()->level > 14)
 					["<a style='margin-right:10px;cursor:pointer;' class='deletable'><span class='glyphicon glyphicon-remove' id='{{{ $wad->wadname }}}'></span></a>" +
-						"<a href='/download?file={{{ urlencode($wad->wadname) }}}'>{{{ $wad->wadname }}}</a><span style='margin-left:3px;font-size: 8px'>" +
-						"<a href='/wadinfo?name={{{ urlencode($wad->wadname) }}}'>[View]</a></span>",
+						"<a href='/download?file={{{ urlencode($wad->wadname) }}}'>{{{ $wad->wadname }}}</a><span style='margin-left:3px;font-size: 10px'>" +
+//						"<a href='/wadinfo?name={{{ urlencode($wad->wadname) }}}'>[View]</a></span>",
+"",
 					@else
-						["<a href='/download?file={{{ urlencode($wad->wadname) }}}'>{{{ $wad->wadname }}}</a><span style='margin-left:3px;font-size: 8px'>" +
+						["<a href='/download?file={{{ urlencode($wad->wadname) }}}'>{{{ $wad->wadname }}}</a><span style='margin-left:3px;font-size: 10px'>" +
 							"<a href='/wadinfo?name={{{ urlencode($wad->wadname) }}}'>[View]</a></span>",
 					@endif
 						"{{{$wad->size}}}",

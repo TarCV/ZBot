@@ -4,7 +4,7 @@
 	<div class="block">
 		<div class="heading">Usage</div>
 		<div class="content">
-			Upon starting a server, BestBot will private message (PM) you the RCON password for that server. In order to make use of this RCON password,
+			Upon starting a server, Painkiller will private message (PM) you the RCON password for that server. In order to make use of this RCON password,
 			you will have to join that server, open the console (default is the ` key), and type: <span class="code">send_password your_pass_here</span>.
 			If the password was accepted, an 'Access Granted' message should pop up, otherwise, you may have mistyped the password. It should be noted that
 			you can also copy-paste the password.
@@ -35,16 +35,18 @@
 		</div>
 		<div class="heading">Rules</div>
 		<div class="content">
-			Please note that although the server started is still yours, you need to abide by a set of rules in order to keep using BE. These are as follow:
+			Please note that although the server started is still yours, you need to abide by a set of rules in order for everyone to enjoy TSPG. These are as follows:
 			<ol style="margin-top:10px;">
-				<li>You may not kick/ban random players for no reason. Each punishment must have a valid reason associated with it.</li>
-				<li>Please keep sv_cheats off.</li>
+				<li>You may not kick/ban random players for no reason. Each punishment must have a valid reason associated with it. If you find yourself banning a lot of players, consider asking us for help.</li>
+				<li>Please keep sv_cheats off. Keep it fair for everyone.</li>
+				<li>Please don't add bots, they can cause memory leaks. If you're alone, why not invite someone to play with you?</li>
+				<li>Please don't do anything horrendously intensive on your server! We all must share the node.</li>
 			</ol>
 		</div>
 		<div class="heading">Recovering your password</div>
 		<div class="content">
-			If you forget your RCON password, you can type <span class="code">/msg BestBot .rcon &lt;port&gt;</span>. If you don't remember your server's port number,
-			you can type <span class="code">/msg #bestever .servers &lt;your_username&gt;</span> to see a list of your running servers.
+			If you forget your RCON password, you can type <span class="code">/msg Painkiller .rcon &lt;port&gt;</span>. If you don't remember your server's port number,
+			you can type <span class="code">/msg #tspg-painkiller .servers &lt;your_username&gt;</span> to see a list of your running servers.
 		</div>
 	</div>
 </div>

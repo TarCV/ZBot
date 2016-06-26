@@ -712,10 +712,14 @@ public class Server {
 				return "invasion";
 			case "oneflagctf":
 				return "oneflagctf"; // NEEDS SUPPORT (please check)
+			//case null:
+				//return null;
 		}
 
 		// If the gametype is unknown, return null
-		return null;
+		// return null;
+		// Actually, return cooperative [DA]
+		return "cooperative";
 	}
 
 	/**

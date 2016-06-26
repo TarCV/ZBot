@@ -14,10 +14,18 @@
 	{{ HTML::script('/static/js/main.js'); }}
 	<link href='http://fonts.googleapis.com/css?family=Noto+Sans' rel='stylesheet' type='text/css'>
 	<link href='http://fonts.googleapis.com/css?family=Source+Code+Pro' rel='stylesheet' type='text/css'>
-	<title>{{ $title }} - Best Ever</title>
+	<title>{{ $title }} - [TSPG] The Sentinel's Playground</title>
 </head>
 <body>
 <div class="main">
+	<div class="header">
+		<div class="logo">
+			<img=banner.png></img>
+			<div class="logo-footer">
+			</div>
+		</div>
+	</div>
+<div id="main">
 	<nav class="navbar navbar-default navbar-fixed-top" role="navigation">
 		<div class="container-fluid">
 			<div class="navbar-header">
@@ -27,7 +35,7 @@
 					<span class="icon-bar"></span>
 					<span class="icon-bar"></span>
 				</button>
-				<a class="navbar-brand" href="/">BE</a>
+				<a class="navbar-brand" href="/">TSPG</a>
 			</div>
 			<div class="collapse navbar-collapse" id="navbar-collapse">
 				<ul class="nav navbar-nav">
@@ -41,6 +49,7 @@
 					<li><a href="/bannedwads">Banned Wads</a></li>
 				</ul>
 				<ul class="nav navbar-nav navbar-right">
+					<li><a href="http://thesentinel.allfearthesentinel.net/servicedesk/customer/portal/1">Service Desk</a>
 					@if (isset(Auth::user()->username))
 						<li><a href="/account">{{{ Auth::user()->username }}}</a></li>
 						<li><a href="/logout">Log out</a></li>

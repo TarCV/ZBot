@@ -53,3 +53,9 @@ local.properties
 
 # output
 classes/
+
+bestbot.log
+
+vendor
+*.log
+phpMyAdmin*

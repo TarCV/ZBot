@@ -10,11 +10,11 @@ return array(
 	// Make sure you change this on the HTML page since it isn't linked currently
 	'max_upload_size' => 419430400, // 400MB
 	// WAD directory
-	'wad_directory' => '',
+	'wad_directory' => '/home/zandronum/bestbot/wads/',
 	// CFG directory
-	'cfg_directory' => '',
+	'cfg_directory' => '/home/zandronum/bestbot/configs/',
 	// Directory of logs
-	'log_directory' => '',
+	'log_directory' => '/home/zandronum/bestbot/logs/',
 	// List of bad IWADS
 	'bad_iwads' => array(
 		'DOOM.WAD',

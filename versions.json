@@ -1,0 +1,4 @@
+[
+	{ "name": "2.0", "path": "/home/zandronum/zandronum-bin/2.1.2", default: true, "description": "Zandronum 2.0" },
+	{ "name": "3.0", "path": "/home/zandronum/zandronum-beta/3-0-r160229-1221", default:false, "description": "Zandronum 3.0, for testing" },
+]

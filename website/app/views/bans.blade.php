@@ -1,10 +1,11 @@
 @include ('includes.header')
+</div>
 
 <div class="main-content">
 	<div class="heading">Bans</div>
 	<div class="block">
-		This is the Best Ever banlist. Users are added here when they break Zandronum Master Server rules (cheating, excessive trolling, negative attitude, etc).
-		If you were wrongfully added, please visit irc.zandronum.com:6667 #bestever and speak to an administrator.
+		This is the TSPG banlist. Users are added here when they break Zandronum Master Server rules (cheating, excessive trolling, negative attitude, etc).
+		If you were wrongfully added, please visit irc.zandronum.com:6667 #tspg-painkiller and speak to an administrator.
 	</div>
 	<div class="block">
 		Please note that VPN bans are hidden by default. If you'd like to see them click <a href="?vpn=1">here</a>.

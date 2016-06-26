@@ -1,0 +1,580 @@
+<html>
+<head>
+	<style type="text/css">
+		body { font-size: 15px; font-family: sans-serif; margin: 2em; }
+		h1, h2, h3 { margin: 0.5em 0 0.5em 0; }
+		ul, ol { margin: 0; padding: 0 1.25em; transition: background-color 0.1s, border-color 0.1s; border-radius: 8px; border-top-left-radius: 0px; border: 1px solid rgba(0, 0, 0, 0.05); background-color: rgba(0, 0, 0, 0.0125); }
+		ul:hover, ol:hover { background-color: rgba(0, 0, 0, 0.025); border-color: rgba(0, 0, 0, 0.1); }
+		li { margin: 0 0.5em; line-height: 1.75em; text-indent: 0; }
+		ol > li { text-indent: 0.25em; }
+		li.note { list-style: circle; }
+		li.note > i { color: royalblue; }
+		li.note > b { color: red; }
+		li.note > i > b { color: blue; }
+		span.reference { color: BlueViolet ; }
+		li.reference > i { color: green; }
+		ul > li { list-style: disc; }
+		ul > li { padding: 0.1em 0; }
+		.code, pre { font-family: monospace; }
+		pre { overflow-x: auto; line-height: 1.25em; }
+		.small { font-size: 11px; }
+		a { color: Indigo; }
+		input[type="button"] { color: #333333; background-color: #ffffff; border: 1px solid #cccccc; padding: 4px 8px; font-size: 14px; border-radius: 1px; }
+		input[type="button"].save { color: #ffffff; background-color: #3498db; border-color #258cd1; }
+		input[type="button"].remove { color: #ffffff; background-color: #f1c40f; border-color #dab10d; }
+	</style>
+</head>
+<body>
+<h1>All Fear The Sentinel Server Setup Guide</h1>
+
+<br>
+<h2>Contents</h2>
+<ul>
+	<li><a href="#gettingstarted">Getting Started</a>
+	<ol type="1">
+		<li><a href="#onpainkiller">On Painkiller</a>
+		<li><a href="#ifthenewnodeisclonedfromanother">If the new node is cloned from another</a>
+		<li><a href="#beforeinstallingsyncthing">Before Installing Syncthing</a>
+		<li><a href="#installingsyncthing">Installing Syncthing</a>
+		<li><a href="#aftersyncthingisdonesyncingsync">After Syncthing is done syncing ~/Sync/</a>
+		<li><a href="#aftersyncthingisdonesyncingbestbot">After Syncthing is done syncing ~/bestbot/</a>
+		<li><a href="#creatingnodeinfosh">Creating ~/nodeinfo.sh</a>
+		<li><a href="#settingupminin">Setting up MUNIN</a>
+		<li><a href="#addingmuninstats">Adding MUNIN Stats</a>
+		<li><a href="#extrastuffthatneedstobedone">Extra stuff that needs to be done</a>
+	</ol>
+	<li><a href="#otherthings">Other Things</a>
+	<ul>
+		<li><a href="#attachingstartingstoppingandrestartingsyncthing">Attaching, Starting, Stopping and Restarting Syncthing</a>
+		<li><a href="#attachingstartingstoppingandrestartingbestbot">Attaching, Starting, Stopping and Restarting BestBot</a>
+		<li><a href="#syncthingfolders">Syncthing Folders</a>
+		<li><a href="#updatingzandronumbinaries">Updating Zandronum Binaries</a>
+		<li><a href="#notes">Notes</a>
+	</ul>
+</ul>
+<br>
+
+<br>
+<hr>
+
+<br>
+<a name="gettingstarted"></a>
+<h2>Getting Started</h2>
+
+<br>
+<a name="onpainkiller"></a>
+<h3>On Painkiller</h3>
+<ul>
+	<li>Run: <b class="code">~/mysql_allow.sh <span class="reference">{node}</span></b>
+	<li class="reference"><i><b class="code">{node}</b> is the lowercase name of the node</i>
+</ul>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+
+<br>
+<a name="ifthenewnodeisclonedfromanother"></a>
+<h3>If the new node is cloned from another</h3>
+<ul>
+	<li><b>Syncthing</b>
+	<ol type="1">
+		<li>Stop Syncthing
+		<li>Delete: <b class="code">~/.config/syncthing/config.xml</b>
+		<li>Restart Syncthing
+		<li>See the <b class="code"><a href="#installingsyncthing">Installing Syncthing</a></b> section
+	</ol>
+	<li><b>BestBot</b>
+	<ol type="1">
+		<li>Edit: <b class="code">~/bestbot/bestbot.ini</b>
+		<ul>
+			<li>Change anything relevant to the node
+		</ul>
+		<li>Save and close
+	</ol>
+	<ol type="1">
+		<li>See the <b class="code"><a href="#creatingnodeinfosh">Creating ~/nodeinfo.sh</a></b> section
+		<li>See the <b class="code"><a href="#settingupminin">Setting up MUNIN</a></b> section
+		<li>See the <b class="code"><a href="#addingmuninstats">Adding MUNIN Stats</a></b> section
+	</ol>
+</ul>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+
+<br>
+<a name="beforeinstallingsyncthing"></a>
+<h3>Before Installing Syncthing</h3>
+<ol type="1">
+	<li>Edit: <b class="code">~/.screenrc</b>
+	<ul>
+		<li>Add this to the file
+		<ul>
+<pre>zombie kr</pre>
+		</ul>
+	</ul>
+	<li>Save and close
+	<li class="note"><i>This will make it so screen is not killed when an application it's running dies</i>
+</ol>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+
+<br>
+<a name="installingsyncthing"></a>
+<h3>Installing Syncthing</h3>
+<ol type="1">
+	<li>Best way to do it is to copy the folder <b class="code">~/syncthing/</b> from Painkiller
+	<ul>
+		<li>Else you can download it from here: <b class="code"><a href="https://www.syncthing.net/">https://www.syncthing.net/</a></b>
+	</ul>
+	<li>Start: <b class="code">~/syncthing/syncthing</b> then immediately press <b class="code">Ctrl+C</b> to close it to generate the config file
+	<li>Edit: <b class="code">~/.config/syncthing/config.xml</b>
+	<ul>
+		<li>Set <b class="code">gui > address</b> to: <b class="code">0.0.0.0:8384</b>
+	</ul>
+	<li>Save and close
+	<li>Run: <b class="code">screen -dmS syncthing ~/syncthing/syncthing</b>
+	<li>Open up the Syncthing GUI via <b class="code">https://<span class="reference">{node}</span>.allfearthesentinel.net:8384/</b>
+	<li class="reference"><i><b class="code">{node}</b> is the lowercase name of the node</i>
+	<ol type="A">
+		<li>First off
+		<ol type="1">
+			<li>Select the only folder listed under: <b class="code">Folders</b>
+			<ul>
+				<li>Click: <input type="button" value="Edit"/>
+				<li>Click: <input type="button" class="remove" value="Remove"/>
+				<li>The default folder that comes set up with Syncthing is not needed
+			</ul>
+			<li>Go to: <b class="code">Actions > Settings</b>
+			<ul>
+				<li>Set <b class="code">Device Name</b> to: <b class="code">[NODE] <span class="reference">{name}</span></b>
+				<li>Uncheck: <b class="code">Global Discovery</b>
+				<li>Set <b class="code">GUI Authentication User</b> to: <b class="code">admin</b>
+				<li>Set <b class="code">GUI Authentication Password</b> to: <b class="code"><span class="reference">{password}</span></b>
+				<li>Check: <b class="code">User HTTPS for GUI</b>
+				<li>Click: <input type="button" class="save" value="Save"/>
+				<li class="reference"><i><b class="code">{name}</b> is Full Name of the Node</i>
+				<li class="reference"><i><b class="code">{password}</b> is the User's Login Password</i>
+			</ul>
+			<li>Restart Syncthing
+			<ul>
+				<li>You'll most likely get SSL Certificate Errors, just exempt and proceed onwards
+				<ul>
+					<li>If you get a TLS Error after, just refresh the page
+				</ul>
+				<li>Login with the Username and Password
+			</ul>
+			<li>Go to: <b class="code">Actions > Show ID</b>
+			<ul>
+				<li>Copy the ID
+			</ul>
+		</ol>
+		<li>Open up Painkiller's GUI via <b class="code">https://painkiller.allfearthesentinel.net:8384/</b>
+		<ol type="1">
+			<li>Click: <input type="button" value="Add Remote Device"/>
+			<ul>
+				<li>Set <b class="code">Device ID</b> to: <b class="code"><span class="reference">{id}</span></b>
+				<li>Set <b class="code">the Address</b> to: <b class="code">tcp://<span class="reference">{node}</span>.allfearthesentinel.net/</b>
+				<li>Set <b class="code">Compression</b> to: <b class="code">All Data</b>
+				<li>Check: <b class="code">Introducer</b>
+				<li>Check All under: <b class="code">Share Folders With Device</b>
+				<li>Click: <input type="button" class="save" value="Save"/>
+				<li class="reference"><i><b class="code">{id}</b> is ID you copied from the new Node</i>
+				<li class="reference"><i><b class="code">{node}</b> is the lowercase name of the node</i>
+			</ul>
+			<li>Select the Node under: <b class="code">Remote Devices</b>
+			<ul>
+				<li>Click: <input type="button" value="Pause"/>
+			</ul>
+			<li>Restart Syncthing
+		</ol>
+		<li>Go back to the Node's GUI
+		<ol type="1">
+		<li>Some yellow messages should show up such as <b class="code">"Painkiller wants to share folder SomeFolder"</b>
+		<ul>
+			<li class="note"><i>There is a chance of a string breakage and it will say <b class="code">{%device%} wants to share folder "{%folder%}"</b>, don't worry about it</i>
+		</ul>
+			<li>Click: <input type="button" value="Add"/>
+			<ul>
+				<li>Copy the Folder ID and paste it in to <b class="code">Folder Path</b>
+				<ul>
+					<li class="note"><b>Note:</b> <i>If the Folder ID is not a path and just a name, Set <b class="code">Folder Path</b> to: <b class="code">~/<span class="reference">{FolderID}</span>/</b></i>
+				</ul>
+				<li>Folder Labels are optional, see Painkiller for their names
+				<li>Click: <input type="button" class="save" value="Save"/>
+			</ul>
+			<li>Select the newly added folder under: <b class="code">Folders</b>
+			<ul>
+				<li>Click: <input type="button" value="Edit"/>
+				<ul>
+					<li>Click: <input type="button" value="Ignore Patterns"/>
+					<ul>
+						<li>Add the required Ignore Patterns found under: <b class="code">the <b class="code"><a href="#syncthingfolders">Syncthing Folders</a></b> section</b>
+						<li>Click: <input type="button" class="save" value="Save"/>
+					</ul>
+					<li>Click: <input type="button" class="save" value="Save"/>
+				</ul>
+				<li>Make sure to do it for each added folder
+			</ul>
+			<li>Restart Syncthing
+		</ol>
+		<li>Go back to the Painkiller's GUI
+		<ul>
+			<li>Select the Node under: <b class="code">Remote Devices</b>
+		</ul>
+		<ul>
+			<li>Click: <input type="button" value="Resume"/>
+			<li>This will ensure that files and folders ignored by the Ignore Patterns won't be copied prematurely before they are set up
+			<ul>
+				<li class="note"><i>They really need to add this to the Add Folder Popup and the ignores to the config rather than a .stignores file</i>
+			</ul>
+			<li class="note"><b>Note:</b> <i>Because Introducer was checked, all other nodes should automatically have the new one added and set up to sync</i>
+		</ul>
+	</ol>
+	<li class="note"><b>Note:</b> <i>Any new folders should be added to <b class="code">Painkiller</b> and shared to other nodes from there</i>
+	<ul>
+		<li class="note"><i>Folder IDs should be their paths to reduce confusion</i>
+	</ul>
+	<li class="note"><b>Note:</b> <i>Any update in the <b class="code"><a href="#syncthingfolders">Syncthing Folders > Ignore Patterns</a></b> subsection must be applied to each node manually</i>
+</ol>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+
+<br>
+<a name="aftersyncthingisdonesyncingsync"></a>
+<h3>After Syncthing is done syncing ~/Sync/</h3>
+<ol type="1">
+	<li>Run these commands:
+	<ol type="1">
+		<li><b class="code">cd ~</b>
+		<li><b class="code">rm .bashrc</b>
+		<li><b class="code">rm .screenrc</b>
+		<li><b class="code">ln -s Sync/bashrc .bashrc</b>
+		<li><b class="code">ln -s Sync/screenrc .screenrc</b>
+		<li><b class="code">ln -s Sync/start-bestbot.sh start-bestbot.sh</b>
+		<li><b class="code">ln -s Sync/start-screenthing.sh start-screenthing.sh</b>
+	</ul>
+	<li>Restart Bash or Re-Login to apply bashrc changes
+</ol>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+
+<br>
+<a name="aftersyncthingisdonesyncingbestbot"></a>
+<h3>After Syncthing is done syncing ~/bestbot/</h3>
+<ol type="1">
+	<li>In <b class="code">~/bestbot/</b>, copy <b class="code">bestbot.template.ini</b> as <b class="code">bestbot.ini</b>
+	<li>Edit said file
+	<ul>
+		<li>Add the relevant changes for the node
+	</ul>
+	<li>Save and close
+	<li>Run: <b class="code">~/start-bestbot.sh</b>
+</ol>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+
+<br>
+<a name="creatingnodeinfosh"></a>
+<h3>Creating ~/nodeinfo.sh</h3>
+<ol type="1">
+	<li>Create and Edit <b class="code">~/nodeinfo.sh</b>
+	<ul>
+		<li>Make sure it contains:
+		<ul>
+<pre>#!/usr/bin/env bash
+export NODE_NAME="<span class="reference">{name}</span>"
+export NODE_LOCATION="<span class="reference">{city}</span>, <span class="reference">{country}</span>"
+export bannedwads=""</pre>
+		</ul>
+		<li class="reference"><i><b class="code">{name}</b> is Full Name of the Node</i>
+		<li class="reference"><i><b class="code">{city}</b> is the City the Server is located in</i>
+		<li class="reference"><i><b class="code">{country}</b> is the Country the City is located in</i>
+	</ul>
+	<li>Save and close
+</ol>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+
+<br>
+<a name="settingupminin"></a>
+<h3>Setting up MUNIN</h3>
+<ol type="1">
+	<li>Install munin packages: <b class="code">sudo apt-get install munin-node libdbi1 libdbi-perl libdbd-mysql-perl</b>
+	<li>Add master <b class="code">munin.csnxs.uk</b> to list of allows: <b class="code">allow ^85\.159\.210\.120$</b>
+	<li>Edit MySQL module: <b class="code">/etc/munin/plugin-conf.d/mysql.conf</b>
+	<ul>
+		<li>Make sure it looks like:
+		<ul>
+<pre>[mysql*]
+user root
+env.mysqlopts --defaults-file=/etc/mysql/debian.cnf
+env.mysqluser root
+env.mysqlpassword <span class="reference">{password}</span>
+env.mysqlconnection DBI:mysql:mysql;mysql_read_default_file=/etc/mysql/debian.cnf</pre>
+		</ul>
+		<li class="reference"><i><b class="code">{password}</b> is the MySQL Database Password</i>
+	</ul>
+	<li>Install munin suggested modules: <b class="code">sudo munin-node-configure --shell | sudo sh</b>
+	<li>Restart munin-node: <b class="code">sudo service munin-node restart</b>
+	<li>Ask <b class="code">Sean</b> to add your node to the master
+	<li>Once that's done, wait for the master to sync
+	<li class="note"><i>It syncs every 5 minutes, and takes a few minutes to process the data</i>
+</ol>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+
+<br>
+<a name="addingmuninstats"></a>
+<h3>Adding MUNIN Stats</h3>
+<ol type="1">
+	<li>On Painkiller, Edit <b class="code">~/bestbot/BestBot/website/app/views/wadstats.blade.php</b>
+	<ul>
+		<li>Add this within the <b class="code">&lt;center&gt;</b> tag at the bottom under <b class="code">&lt;div class="heading"&gt;Server Stats&lt;/div&gt;</b>
+		<ul>
+<pre>&lt;h3 style="color: black; padding: 10px;"&gt;<span class="reference">{name}</span>&lt;/h3&gt;
+&lt;img style="vertical-align: top; padding: 10px;" src="https://munin.csnxs.uk/munin-cgi/munin-cgi-graph/allfearthesentinel.net/<span class="reference">{node}</span>/cpu-week.png"/&gt;
+&lt;img style="vertical-align: top; padding: 10px;" src="https://munin.csnxs.uk/munin-cgi/munin-cgi-graph/allfearthesentinel.net/<span class="reference">{node}</span>/memory-week.png"/&gt;
+&lt;img style="vertical-align: top; padding: 10px;" src="https://munin.csnxs.uk/munin-cgi/munin-cgi-graph/allfearthesentinel.net/<span class="reference">{node}</span>/netstat-week.png"/&gt;</pre>
+		</ul>
+		<li class="reference"><i><b class="code">{name}</b> is Full Name of the Node</i>
+		<li class="reference"><i><b class="code">{node}</b> is the lowercase name of the node</i>
+	</ul>
+	<li>Save and close</b>
+</ol>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+
+<br>
+<a name="extrastuffthatneedstobedone"></a>
+<h3>Extra stuff that needs to be done</h3>
+<ol type="1">
+	<li>Install MySQL Client tools by running: <b class="code">sudo apt-get install mysql-client</b>
+	<li>And this line to the root's crontab by running: <b class="code">sudo crontab -e</b>
+	<ul>
+		<li>Add this to the file:
+		<ul>
+<pre>*/5 * * * * /home/zandronum/Sync/updatebans.sh</pre>
+		</ul>
+		<li>Save and close
+		<li class="note"><i>This file can be ran any time if you need an immediate update</i>
+	</ul>
+	<li>Add these lines to the user's crontab by running: <b class="code">crontab -e</b>
+	<ul>
+		<li>Add this to the file:
+		<ul>
+<pre>@reboot ~/start-bestbot.sh
+@reboot ~/start-syncthing.sh</pre>
+		</ul>
+		<li>Save and close
+	</ul>
+</ol>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+
+<br>
+<h2>Done!</h2>
+
+<br>
+<hr>
+
+<br>
+<a name="otherthings"></a>
+<h2>Other Things</h2>
+
+<br>
+<a name="attachingstartingstoppingandrestartingsyncthing"></a>
+<h3>Attaching, Starting, Stopping and Restarting Syncthing</h3>
+<ul>
+	<li><b>Ataching and Detaching</b>
+	<ul>
+		<li>Run: <b class="code">screen -x syncthing</b> to <i>Attach</i> to the screen
+		<li>Press: <b class="code">Ctrl+A</b> then <b class="code">D</b> to <i>Detach</i> from screen
+	</ul>
+	<li><b>Starting</b>
+	<ul>
+		<li>Run: <b class="code">~/start-screenthing.sh</b>
+		<li>Or:<b class="code">~/Sync/start-screenthing.sh</b>
+	</ul>
+	<li><b>Stopping</b>
+	<ul>
+		<li>Run: <b class="code">screen -x syncthing</b>
+		<ul>
+			<li>Press: <b class="code">Ctrl+C</b> to <i>Stop</i> the Program
+			<li>Press: <b class="code">K</b> to <i>Close</i> the screen if you wish
+		</ul>
+	</ul>
+	<li><b>Restarting</b>
+	<ul>
+		<li>Run: <b class="code">screen -x syncthing</b>
+		<ul>
+			<li>Press: <b class="code">Ctrl+C</b> to <i>Stop</i> the Program
+			<li>Press: <b class="code">R</b> to <i>Restart</i> the Program
+		</ul>
+		<li>From GUI</b>
+		<ul>
+			<li>Go to: <b class="code">Actions > Restart</b>
+			<li>Or: <b class="code">A Yellow message may appear with a Restart Button</b>
+		</ul>
+	</ul>
+</ul>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+
+<br>
+<a name="attachingstartingstoppingandrestartingbestbot"></a>
+<h3>Attaching, Starting, Stopping and Restarting BestBot</h3>
+<ul>
+	<li><b>Ataching and Detaching</b>
+	<ul>
+		<li>Run: <b class="code">screen -x bestbot</b>
+		<li>Press: <b class="code">Ctrl+A</b> then <b class="code">D</b> to <i>Detach</i> from screen
+	</ul>
+	<li><b>Starting</b>
+	<ul>
+		<li>Run: <b class="code">~/start-bestbot.sh</b>
+		<li>Or:<b class="code">~/Sync/start-bestbot.sh</b>
+	</ul>
+	<li><b>Stopping</b>
+	<ul>
+		<li>Run: <b class="code">screen -x bestbot</b>
+		<ul>
+			<li>Press: <b class="code">Ctrl+C</b> to <i>Stop</i> the Program
+			<li>Press: <b class="code">K</b> to <i>Close</i> the screen if you wish
+		</ul>
+	</ul>
+	<li><b>Restarting</b>
+	<ul>
+		<li>Run: <b class="code">screen -x bestbot</b>
+		<ul>
+			<li>Press: <b class="code">Ctrl+C</b> to <i>Stop</i> the Program
+			<li>Press: <b class="code">R</b> to <i>Restart</i> the Program
+		</ul>
+	</ul>
+</ul>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+
+<br>
+<a name="syncthingfolders"></a>
+<h3>Syncthing Folders</h3>
+<ul>
+	<li><b class="code">BestBot:</b> <i class="code">/home/zandronum/bestbot/</i>
+	<ul>
+		<li><b class="code">Ignore Patterns</b>
+		<ul>
+<pre>bestbot.ini
+bestbot.log
+www_*.log
+BestBot/website/
+adminslists/
+banlists/
+whitelists/</pre>
+		</ul>
+		<li><b class="code">Painkiller Additional Ignore Patterns</b>
+		<ul>
+<pre>
+logs/</pre>
+		</ul>
+	</ul>
+	<li><b class="code">Zandronum:</b> <i class="code">/home/zandronum/zandronum-bin/</i>
+	<ul>
+		<li><b class="code">Ignore Patterns</b>
+		<ul>
+<pre>core.*</pre>
+		</ul>
+	</ul>
+	<li><b class="code">Zandronum Beta:</b> <i class="code">/home/zandronum/zandronum-beta/</i>
+	<ul>
+		<li><b class="code">Ignore Patterns</b>
+		<ul>
+<pre>core.*</pre>
+		</ul>
+	</ul>
+	<li><b class="code">Sync:</b> <i class="code">/home/zandronum/Sync/</i>
+	<li><b class="code">Java:</b> <i class="code">/home/zandronum/jdk/</i>
+</ul>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+
+<br>
+<a name="updatingzandronumbinaries"></a>
+<h3>Updating Zandronum Binaries</h3>
+<ul>
+	<li class="note"><b>Note:</b> <i>You only need to update the binaries on Painkiller</i>
+	<li class="note"><b>Note:</b> <i>Due to problems with previous locally compiled binaries use official binaries where possible</i>
+	<ul>
+		<li>They can be found at <b class="code">https://zandronum.com/</b>download as Linux Archive for 64-bit x68
+	</ul>
+	<li>Unpack Stable Release files in to <b class="code">~/zandronum-bin/</b> in to it's own separate folder
+	<ul>
+		<li>Folders should be named: <b class="code"><span class="reference">{vh}</span>.<span class="reference">{vl}</span>.<span class="reference">{vs}</span></b>
+		<li class="reference"><i><b class="code">{vh}</b>, <b class="code">{vl}</b>, <b class="code">{vs}</b>, are the High, Low, Sub Version respectively</i>
+		<ul>
+			<li>Example: 2.1.2
+		</ul>
+		<li>Edit <b class="code">~/zandronum-bin/launchzanstable.sh</b> to reflect the changes
+		<li>In the IRC channels, Run: <b class="code">.killversion <span class="reference">{oldversion}</span></b>
+		<li class="reference"><i><b class="code">{oldversion}</b> is the previous version that was replaced</i>
+		<ul>
+			<li class="note"><i>Make sure to <b class="code">.broadcast</b> a waning and give it 10 minutes or so prior to killing the servers</i>
+		</ul>
+	</ul>
+	<li>Unpack Beta Releases in to <b class="code">~/zandronum-beta/</b> in to their own separate folder
+	<ul>
+		<li>Folders should be named: <b class="code"><span class="reference">{vh}</span>-<span class="reference">{vl}</span>-r<span class="reference">{bn}</span></b>
+		<li class="reference"><i><b class="code">{vh}</b>, <b class="code">{vl}</b>, <b class="code">{bn}</b>, are the High, Low Version and Build Number respectively</i>
+		<ul>
+			<li>Example: 3-0-r160229-1221
+		</ul>
+		<li>Edit <b class="code">~/zandronum-bin/launchzandevel.sh</b> to reflect the changes
+	</ul>
+</ul>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+
+<br>
+<a name="notes"></a>
+<h3>Notes</h3>
+<ul>
+	<li>Java binaries are in <b class="code">~/Sync/jdk/</b>
+	<ul>
+		<li class="note"><i>The .bashrc environment able has been updated to reflect this</i>
+	</ul>
+	<li>Screens will not automatically close if <b class="code">~/.screenrc</b> contains <b class="code">"zombie kr"</b>
+	<ul>
+		<li class="note"><i>On a Terminated Screen, press <b class="code">K</b> to Close, <b class="code">R</b> to Restart</i>
+	</ul>
+	<li>By default, the sync checks for Syncthing is 60 seconds
+	<ul>
+		<li>This can be changed by:
+		<ul>
+			<li>Select: Any folder under: <b class="code">Folders</b>
+			<ul>
+				<li>Click: <input type="button" value="Edit"/>
+				<ul>
+					<li>Open: <b class="code">Advanced settings</b>
+					<li>Set <b class="code">Rescan Interval</b> to: <b class="code">Any number of seconds.</b>
+					<ul>
+						<li class="note"><i>30 Second Minimum Recommended</i>
+					</ul>
+					<li>Click: <input type="button" class="save" value="Save"/>
+				</ul>
+				<li>Restart Syncthing
+			</ul>
+		</ul>
+	</ul>
+	<li>Ignore any Out of Sync messages in Syncthing
+	<ul>
+		<li class="note"><i>Only observed place so far is on Painkiller due to prematurely copied files that have been later ignored</i>
+	</ul>
+	<li>Take care not to delete, move or rename these files from <b class="code">~/Sync/</b>
+	<ul>
+		<li><b class="code">bashrc</b> and <b class="code">screenrc</b>
+		<ul>
+			<li class="note"><i>Server's .bashrc and .screenrc files are symlinked here respectively</i>
+		</ul>
+		<li><b class="code">start-bestbot.sh</b>
+	</ul>
+</ul>
+<i><a class="small" href="#">[Back to Top]</a></i>
+<br>
+</body>
+</html>
