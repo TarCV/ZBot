@@ -27,6 +27,7 @@ import java.util.*;
 
 import org.bestever.serverquery.QueryManager;
 import org.bestever.serverquery.ServerQueryRequest;
+import org.jibble.pircbot.Colors;
 import org.jibble.pircbot.IrcException;
 import org.jibble.pircbot.PircBot;
 
@@ -164,6 +165,9 @@ public class Bot extends PircBot {
 	 */
 	public void onConnect() {
 		this.joinChannel(cfg_data.irc_channel);
+		this.joinChannel(cfg_data.log_channel);
+		
+		sendLogInfoMessage("Bot started.");
 	}
 
 	/**
@@ -217,6 +221,7 @@ public class Bot extends PircBot {
 		}
 		cfg_data.bot_extra_wads.add(wad);
 		sendMessage(sender, "Added " + wad + " to the wad startup list.");
+		sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " adds " + Colors.BOLD + wad + Colors.BOLD + " to the startup WAD list");
 	}
 
 	/**
@@ -228,6 +233,7 @@ public class Bot extends PircBot {
 			if (listWad.equalsIgnoreCase(wad)) {
 				cfg_data.bot_extra_wads.remove(wad);
 				sendMessage(sender, "Wad " + wad + " was removed from the wad startup list.");
+				sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " removes " + Colors.BOLD + wad + Colors.BOLD + " from the startup WAD list");
 				return;
 			}
 		}
@@ -299,7 +305,7 @@ public class Bot extends PircBot {
 	 * removal from the linkedlist.
 	 * @param portString The port desired to kill
 	 */
-	private void killServer(String portString) {
+	private void killServer(String portString, String sender) {
 		logMessage(LOGLEVEL_NORMAL, "Killing server on port " + portString + ".");
 		// Ensure it is a valid port
 		if (!Functions.isNumeric(portString)) {
@@ -320,6 +326,8 @@ public class Bot extends PircBot {
 		Server targetServer = getServer(port);
 		if (targetServer != null) {
 			targetServer.auto_restart = false;
+			String owner = targetServer.sender;
+			sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " requests kill of " + Colors.BOLD + owner + Colors.BOLD + "'s server on port "+ Colors.BOLD + portString + Colors.BOLD);
 			targetServer.killServer();
 		}
 		else
@@ -391,9 +399,14 @@ public class Bot extends PircBot {
 				if (servers != null) {
 					String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
 					for (Server s : servers) {
-						s.in.println("say \\cf--------------\\cc; say GLOBAL ANNOUNCEMENT: " + Functions.escapeQuotes(message) + "; say \\cf--------------\\cc;");
+						s.in.println("echo <--> GLOBAL SERVICE ANNOUNCEMENT <-->");
+						s.in.println("say \\cf--------------\\cc");
+						s.in.println("say GLOBAL ANNOUNCEMENT: " + Functions.escapeQuotes(message) + "");
+						s.in.println("say \\cf--------------\\cc;");
+						s.in.println("echo <--> GLOBAL SERVICE ANNOUNCEMENT <-->");
 					}
 					sendMessage(cfg_data.irc_channel, "Global broadcast sent.");
+					sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " sends global announcement: " + message);
 				}
 				else {
 					sendMessage(cfg_data.irc_channel, "There are no servers running at the moment.");
@@ -419,12 +432,22 @@ public class Bot extends PircBot {
 					String message = Functions.implode(Arrays.copyOfRange(keywords, 2, keywords.length), " ");
 					Server s = getServer(port);
 					if (s != null) {
-						if (Functions.getUserName(s.irc_hostname).equals(Functions.getUserName(hostname)) || isAccountTypeOf(level, MODERATOR)) {
+						boolean isHoster = Functions.getUserName(s.irc_hostname).equals(Functions.getUserName(hostname));
+						if (isHoster || isAccountTypeOf(level, MODERATOR)) {
 							s.in.println(message);
 							if (keywords[2].equalsIgnoreCase("sv_rconpassword") && keywords.length > 2) {
 								s.rcon_password = keywords[3];
 							}
 							sendMessage(recipient, "Command successfully sent.");
+							
+							String logSender = (isHoster ? "their own" : Colors.BOLD + Functions.getUserName(s.irc_channel) + Colors.BOLD + "'s");
+							String logStr = Colors.BOLD + recipient + Colors.BOLD + " sends command to " + logSender + " server on port " + port + ": " + message;
+							
+							if (isHoster) {
+								sendLogUserMessage(logStr);
+							} else {
+								sendLogAdminMessage(logStr);
+							}
 						}
 						else
 							sendMessage(recipient, "You do not own this server.");
@@ -468,7 +491,7 @@ public class Bot extends PircBot {
 					toggleAutoRestart(userLevel, keywords);
 					break;
 				case ".broadcast":
-					globalBroadcast(userLevel, keywords);
+					globalBroadcast(userLevel, keywords, sender);
 					break;
 				case ".commands":
 					sendMessage(cfg_data.irc_channel, "Allowed commands: " + processCommands(userLevel));
@@ -492,16 +515,16 @@ public class Bot extends PircBot {
 					processHost(userLevel, channel, sender, hostname, message, false, getMinPort());
 					break;
 				case ".kill":
-					processKill(userLevel, keywords, hostname);
+					processKill(userLevel, keywords, hostname, sender);
 					break;
 				case ".killall":
 					processKillAll(userLevel);
 					break;
 				case ".killversion":
-					processKillVersion(userLevel, keywords);
+					processKillVersion(userLevel, keywords, sender);
 					break;
 				case ".killmine":
-					processKillMine(userLevel, hostname);
+					processKillMine(userLevel, hostname, sender);
 					break;
 				case ".killinactive":
 					processKillInactive(userLevel, keywords);
@@ -516,10 +539,10 @@ public class Bot extends PircBot {
 					setNotice(keywords, userLevel);
 					break;
 				case ".off":
-					processOff(userLevel);
+					processOff(userLevel, sender);
 					break;
 				case ".on":
-					processOn(userLevel);
+					processOn(userLevel, sender);
 					break;
 				case ".owner":
 					processOwner(userLevel, keywords);
@@ -765,7 +788,7 @@ public class Bot extends PircBot {
 	 * @param keywords The keywords to be processed
 	 * @param hostname hostname from the sender
 	 */
-	private void processKill(int userLevel, String[] keywords, String hostname) {
+	private void processKill(int userLevel, String[] keywords, String hostname, String sender) {
 		logMessage(LOGLEVEL_NORMAL, "Processing kill.");
 		// Ensure proper syntax
 		if (keywords.length != 2) {
@@ -806,7 +829,7 @@ public class Bot extends PircBot {
 				sendMessage(cfg_data.irc_channel, "Improper port number.");
 		// Admins/mods can kill anything
 		} else if (isAccountTypeOf(userLevel, MODERATOR)) {
-			killServer(keywords[1]); // Can pass string, will process it in the method safely if something goes wrong
+			killServer(keywords[1], sender); // Can pass string, will process it in the method safely if something goes wrong
 		}
 	}
 
@@ -836,7 +859,7 @@ public class Bot extends PircBot {
 			sendMessage(cfg_data.irc_channel, "You do not have permission to use this command.");
 	}
 
-	private void processKillVersion(int userlevel, String[] keywords) {
+	private void processKillVersion(int userlevel, String[] keywords, String sender) {
 		if (isAccountTypeOf(userlevel, ADMIN)) {
 			if (keywords.length != 2) {
 				sendMessage(cfg_data.irc_channel, "Invalid amount of arguments. Syntax: .killversion <version>");
@@ -864,6 +887,7 @@ public class Bot extends PircBot {
 				killed++;
 			}
 
+			sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " kills all " + killed + Colors.BOLD + keywords[1] + Colors.BOLD + " servers");
 			sendMessage(cfg_data.irc_channel, "Killed a total of " + killed + " servers.");
 		}
 	}
@@ -872,7 +896,7 @@ public class Bot extends PircBot {
 	 * @param userLevel The level of the user
 	 * @param hostname The hostname of the person invoking this command
 	 */
-	private void processKillMine(int userLevel, String hostname) {
+	private void processKillMine(int userLevel, String hostname, String sender) {
 		logMessage(LOGLEVEL_TRIVIAL, "Processing killmine.");
 		if (isAccountTypeOf(userLevel, REGISTERED)) {
 			List<Server> servers = getUserServers(Functions.getUserName(hostname));
@@ -886,6 +910,7 @@ public class Bot extends PircBot {
 				}
 				if (ports.size() > 0) {
 					sendMessage(cfg_data.irc_channel, Functions.pluralize("Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") +")", ports.size()));
+					sendLogUserMessage(Colors.BOLD + sender + Colors.BOLD + " kills their " + ports.size() + " servers");
 				}
 				else {
 					sendMessage(cfg_data.irc_channel, "You do not have any servers running.");
@@ -947,12 +972,13 @@ public class Bot extends PircBot {
 	 * Admins can turn off hosting with this
 	 * @param userLevel The user's bitmask level
 	 */
-	private void processOff(int userLevel) {
+	private void processOff(int userLevel, String sender) {
 		logMessage(LOGLEVEL_IMPORTANT, "An admin has disabled hosting.");
 		if (botEnabled) {
 			if (isAccountTypeOf(userLevel, ADMIN)) {
 				botEnabled = false;
 				sendMessage(cfg_data.irc_channel, "Bot disabled.");
+				sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " disables hosting");
 			}
 		}
 	}
@@ -961,12 +987,13 @@ public class Bot extends PircBot {
 	 * Admins can re-enable hosting with this
 	 * @param userLevel The user's bitmask level
 	 */
-	private void processOn(int userLevel) {
+	private void processOn(int userLevel, String sender) {
 		logMessage(LOGLEVEL_IMPORTANT, "An admin has re-enabled hosting.");
 		if (!botEnabled) {
 			if (isAccountTypeOf(userLevel, ADMIN)) {
 				botEnabled = true;
 				sendMessage(cfg_data.irc_channel, "Bot enabled.");
+				sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " enables hosting");
 			}
 		}
 	}
@@ -1034,10 +1061,20 @@ public class Bot extends PircBot {
 					int port = Integer.parseInt(keywords[1]);
 					Server s = getServer(port);
 					if (s != null) {
-						if (Functions.getUserName(s.irc_hostname).equals(Functions.getUserName(hostname)) || isAccountTypeOf(userLevel, MODERATOR)) {
+						boolean isHoster = Functions.getUserName(s.irc_hostname).equals(Functions.getUserName(hostname));
+						if (isHoster || isAccountTypeOf(userLevel, MODERATOR)) {
+							String logSender = (isHoster ? "their own" : Colors.BOLD + s.sender + Colors.BOLD + "'s");
+							String logStr = Colors.BOLD + sender + Colors.BOLD + " requests RCON info for " + logSender + " server on port " + port;
+							
 							sendMessage(sender, "RCON: " + s.rcon_password);
 							sendMessage(sender, "ID: " + s.server_id);
 							sendMessage(sender, "LOG: http://static.allfearthesentinel.net/logs/" + s.server_id + ".txt");
+							
+							if (isHoster) {
+								sendLogUserMessage(logStr);
+							} else {
+								sendLogAdminMessage(logStr);
+							}
 						}
 						else
 							sendMessage(sender, "You do not own this server.");
@@ -1281,6 +1318,28 @@ public class Bot extends PircBot {
 		if (debugMode)
 			sendMessage(cfg_data.irc_channel, "DEBUG " + message);
 	}
+
+    public void sendLogMessage(String message) {
+		if (cfg_data.log_channel != null)
+			sendMessage(cfg_data.irc_channel, message);
+	}
+    
+    public void sendLogInfoMessage(String message) {
+    	sendLogMessage(Colors.GREEN + "[" + Colors.BOLD + "II" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    }
+    
+    public void sendLogErrorMessage(String message) {
+    	sendLogMessage(Colors.RED + "[" + Colors.BOLD + "!!" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    }
+    
+    public void sendLogAdminMessage(String message) {
+    	sendLogMessage(Colors.YELLOW + "[" + Colors.BOLD + "AD" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    }
+    
+    public void sendLogUserMessage(String message) {
+    	sendLogMessage(Colors.CYAN + "[" + Colors.BOLD + "UU" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    }
+
 	/**
 	 * Called when the bot is disconnected
 	 * Ideally, attempt to reconnect

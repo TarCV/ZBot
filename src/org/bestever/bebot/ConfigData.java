@@ -228,6 +228,8 @@ public class ConfigData {
 	 */
 	public int max_restarts = 5;
 
+    public String log_channel = null;
+
 	/**
 	 * This constructor once initialized will parse the config file based on the path
 	 * @param filepath A string with the path to a file
@@ -281,6 +283,7 @@ public class ConfigData {
 		this.irc_pass = irc.get("pass");
 		this.irc_port = Integer.parseInt(irc.get("port"));
 		this.irc_mask = irc.get("hostmask");
+        this.log_channel = irc.get("logchannel");
 		if (irc.get("irc_relay") != null)
 			this.irc_relay = Boolean.parseBoolean(irc.get("irc_relay"));
 
