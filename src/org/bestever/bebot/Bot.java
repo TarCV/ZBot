@@ -393,7 +393,7 @@ public class Bot extends PircBot {
 	 * @param level int - the user's level
 	 * @param keywords String[] - array of words in message sent
 	 */
-	private void globalBroadcast(int level, String[] keywords) {
+	private void globalBroadcast(int level, String[] keywords, String sender) {
 		if (isAccountTypeOf(level, MODERATOR)) {
 			if (keywords.length > 1) {
 				if (servers != null) {
