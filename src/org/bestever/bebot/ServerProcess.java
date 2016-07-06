@@ -23,6 +23,9 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.LinkedHashSet;
 import java.util.Set;
+
+import org.jibble.pircbot.Colors;
+
 import java.lang.reflect.Field;
 
 /**
@@ -281,6 +284,8 @@ public class ServerProcess extends Thread {
 			if (server.bot.cfg_data.bot_public_rcon || AccountType.isAccountTypeOf(server.user_level, AccountType.RCON))
 				server.bot.sendMessage(server.sender, "Your unique server ID is: " + server.server_id + ". This is your RCON password, which can be used using 'send_password "+server.server_id+"' via the in-game console. You can view your logfile at http://static.allfearthesentinel.net/logs/" + server.server_id + ".txt");
 
+			server.bot.sendLogUserMessage(Colors.BOLD+server.sender+Colors.BOLD + " starts server with ID " + Colors.BOLD+server.server_id+Colors.BOLD);
+			
 			// Process server while it outputs text
 			while ((strLine = br.readLine()) != null) {
 				String[] keywords = strLine.split(" ");
@@ -311,6 +316,7 @@ public class ServerProcess extends Thread {
 					server.bot.vSHashmap.get(server.version.name).add(server);
 					server.bot.sendMessage(server.irc_channel, "Server started successfully on port " + server.port + "!");
 					server.bot.sendMessage(server.sender, "To kill your server, in the channel " + server.bot.cfg_data.irc_channel + ", type .killmine to kill all of your servers, or .kill " + server.port + " to kill just this one.");
+					server.bot.sendLogUserMessage(Colors.BOLD+server.sender+Colors.BOLD + "'s server with ID " + Colors.BOLD+server.server_id+Colors.BOLD + " has been assigned port " + Colors.BOLD+server.port+Colors.BOLD);
 				}
 
 				// Check for banned players
@@ -360,10 +366,22 @@ public class ServerProcess extends Thread {
 
 			// Notify the main channel if enabled
 			if (!server.hide_stop_message) {
-				if (server.port != 0)
-					server.bot.sendMessage(server.irc_channel, "Server stopped on port " + server.port + "! Server ran for " + Functions.calculateTime(uptime));
-				else
+				if (server.port != 0) {
+					if (server.being_killed) {
+						server.bot.sendMessage(server.irc_channel, "Server stopped on port " + server.port + "! Server ran for " + Functions.calculateTime(uptime));
+						// Don't log as we already log kill commands
+					} else {
+						server.bot.sendMessage(server.irc_channel, "Server crashed on port " + server.port + "! Server ran for " + Functions.calculateTime(uptime));
+						
+						String owner = server.sender;
+						server.bot.sendLogErrorMessage(Colors.BOLD+owner+Colors.BOLD+"'s server on port " + Colors.BOLD+server.port+Colors.BOLD + " " + Colors.RED+Colors.BOLD+ "CRASHED" +Colors.NORMAL+ "!!!");
+						server.bot.sendLogErrorMessage("A log is available at " + Colors.BOLD + "http://static.allfearthesentinel.net/logs/" + server.server_id + ".log" + Colors.BOLD);
+					}
+				}
+				else {
 					server.bot.sendMessage(server.irc_channel, "Server was not started. This is most likely due to a wad error, missing required wads or requires a later game version. See the log for more details.");
+					
+				}
 			}
 
 			// Remove from the Linked List

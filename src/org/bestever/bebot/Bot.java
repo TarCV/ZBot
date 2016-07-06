@@ -424,7 +424,7 @@ public class Bot extends PircBot {
 	 * @param keywords String[] - message
 	 * @param recipient String - who to return the message to (since this can be accessed via PM as well as channel)
 	 */
-	private void sendCommand(int level, String[] keywords, String hostname, String recipient) {
+	private void sendCommand(int level, String[] keywords, String hostname, String recipient, String sender) {
 		if (isAccountTypeOf(level, REGISTERED)) {
 			if (keywords.length > 2) {
 				if (Functions.isNumeric(keywords[1])) {
@@ -441,7 +441,7 @@ public class Bot extends PircBot {
 							sendMessage(recipient, "Command successfully sent.");
 							
 							String logSender = (isHoster ? "their own" : Colors.BOLD + Functions.getUserName(s.irc_channel) + Colors.BOLD + "'s");
-							String logStr = Colors.BOLD + recipient + Colors.BOLD + " sends command to " + logSender + " server on port " + port + ": " + message;
+							String logStr = Colors.BOLD + sender + Colors.BOLD + " sends command to " + logSender + " server on port " + port + ": " + message;
 							
 							if (isHoster) {
 								sendLogUserMessage(logStr);
@@ -536,7 +536,7 @@ public class Bot extends PircBot {
 					MySQL.loadSlot(hostname, keywords, userLevel, channel, sender);
 					break;
 				case ".notice":
-					setNotice(keywords, userLevel);
+					setNotice(keywords, userLevel, sender);
 					break;
 				case ".off":
 					processOff(userLevel, sender);
@@ -580,7 +580,7 @@ public class Bot extends PircBot {
 					break;
 				case ".send":
 					if (isAccountTypeOf(userLevel, ADMIN))
-						sendCommand(userLevel, keywords, hostname, cfg_data.irc_channel);
+						sendCommand(userLevel, keywords, hostname, cfg_data.irc_channel, sender);
 					break;
 				case ".servers":
 					processServers(keywords);
@@ -635,7 +635,7 @@ public class Bot extends PircBot {
 	 * @param keywords String[] - array of words (message)
 	 * @param userLevel int - bitmask level
 	 */
-	public void setNotice (String[] keywords, int userLevel) {
+	public void setNotice (String[] keywords, int userLevel, String sender) {
 		if (keywords.length == 1) {
 			sendMessage(cfg_data.irc_channel, "Notice is: " + cfg_data.bot_notice);
 			return;
@@ -643,6 +643,7 @@ public class Bot extends PircBot {
 		if (isAccountTypeOf(userLevel, ADMIN)) {
 			cfg_data.bot_notice = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
 			sendMessage(cfg_data.irc_channel, "New notice has been set.");
+			sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " sets periodic global notice to " + Colors.BOLD + cfg_data.bot_notice + Colors.BOLD);
 		}
 		else
 			sendMessage(cfg_data.irc_channel, "You do not have permission to set the notice.");
@@ -815,6 +816,7 @@ public class Bot extends PircBot {
 				if (server != null) {
 					if (Functions.getUserName(server.irc_hostname).equalsIgnoreCase(Functions.getUserName(hostname)) || isAccountTypeOf(userLevel, MODERATOR))
 						if (server.serverprocess != null) {
+							server.being_killed = true;
 							server.auto_restart = false;
 							server.serverprocess.terminateServer();
 						}
@@ -848,6 +850,7 @@ public class Bot extends PircBot {
 			if (tempList.size() > 0) {
 				for (Server s : tempList) {
 					s.hide_stop_message = true;
+					s.being_killed = true;
 					s.auto_restart = false;
 					s.killServer();
 				}
@@ -882,6 +885,7 @@ public class Bot extends PircBot {
 			int killed = 0;
 			for (Server s : tempList) {
 				s.hide_stop_message = true;
+				s.being_killed = true;
 				s.auto_restart = false;
 				s.killServer();
 				killed++;
@@ -904,6 +908,7 @@ public class Bot extends PircBot {
 				ArrayList<String> ports = new ArrayList<>();
 				for (Server s : servers) {
 					s.auto_restart = false;
+					s.being_killed = true;
 					s.hide_stop_message = true;
 					s.killServer();
 					ports.add(String.valueOf(s.port));
@@ -948,6 +953,7 @@ public class Bot extends PircBot {
 						if (System.currentTimeMillis() - s.serverprocess.last_activity > (Server.DAY_MILLISECONDS * numOfDays))
 							if (!s.protected_server) {
 								s.hide_stop_message = true;
+								s.being_killed = true;
 								s.auto_restart = false;
 								ports.add(String.valueOf(s.port));
 								s.serverprocess.terminateServer();
@@ -1198,7 +1204,7 @@ public class Bot extends PircBot {
 					break;
 				case ".send":
 					if (isAccountTypeOf(userLevel, MODERATOR))
-						sendCommand(userLevel, keywords, hostname, sender);
+						sendCommand(userLevel, keywords, hostname, sender, sender);
 					break;
 				case ".shell":
 					if (isAccountTypeOf(userLevel, OPERATOR)) {

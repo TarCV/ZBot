@@ -209,7 +209,12 @@ public class Server {
 	 * The Version of Zandronum this server uses.
 	 */
 	public Version version;
-
+	
+	/**
+	 * This is so we can tell if we crashed or not
+	 */
+	public boolean being_killed = false;
+	
 	/**
 	 * If there's an error with processing of numbers, return this
 	 */
