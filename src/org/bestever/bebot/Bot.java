@@ -497,7 +497,39 @@ public class Bot extends PircBot {
 					sendMessage(cfg_data.irc_channel, "Allowed commands: " + processCommands(userLevel));
 					break;
 				case ".cpu":
-					sendMessage(cfg_data.irc_channel, String.valueOf(ManagementFactory.getOperatingSystemMXBean().getSystemLoadAverage()));
+					try {
+						Runtime r = Runtime.getRuntime();
+						Process p = r.exec(new String[]{"/bin/sh", "-c", "top -b -n1 | head -n 3 | tail -n 1"});
+						BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
+						String inputLine;
+						
+						while ((inputLine = in.readLine()) != null) {
+							sendMessage(cfg_data.irc_channel, inputLine);
+						}
+						
+						in.close();
+					}
+					catch (IOException e) {
+						System.out.println(e);
+					}
+					break;
+				case ".mem":
+				case ".ram":
+					try {
+						Runtime r = Runtime.getRuntime();
+						Process p = r.exec(new String[]{"/bin/sh", "-c", "top -b -n1 | head -n 4 | tail -n 1"});
+						BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
+						String inputLine;
+						
+						while ((inputLine = in.readLine()) != null) {
+							sendMessage(cfg_data.irc_channel, inputLine);
+						}
+						
+						in.close();
+					}
+					catch (IOException e) {
+						System.out.println(e);
+					}
 					break;
 				case ".file":
 					processFile(keywords, channel);
