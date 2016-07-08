@@ -1370,7 +1370,7 @@ public class Bot extends PircBot {
 
     public void sendLogMessage(String message) {
 		if (cfg_data.log_channel != null)
-			sendMessage(cfg_data.irc_channel, message);
+			sendMessage(cfg_data.log_channel, message);
 	}
     
     public void sendLogInfoMessage(String message) {
