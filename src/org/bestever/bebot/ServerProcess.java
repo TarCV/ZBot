@@ -387,7 +387,7 @@ public class ServerProcess extends Thread {
 						
 						String owner = server.sender;
 						server.bot.sendLogErrorMessage(Colors.BOLD+owner+Colors.BOLD+"'s server on port " + Colors.BOLD+server.port+Colors.BOLD + " " + Colors.RED+Colors.BOLD+ "CRASHED" +Colors.NORMAL+ "!!!");
-						server.bot.sendLogErrorMessage("A log is available at " + Colors.BOLD + "http://static.allfearthesentinel.net/logs/" + server.server_id + ".log" + Colors.BOLD);
+						server.bot.sendLogErrorMessage("A log is available at " + Colors.BOLD + "http://static.allfearthesentinel.net/logs/" + server.server_id + ".txt" + Colors.BOLD);
 					}
 				}
 				else {
