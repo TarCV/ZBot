@@ -742,7 +742,7 @@ public class Bot extends PircBot {
 		else {
 			String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
 			sendMessage(cfg_data.irc_channel, message);
-			sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " makes me say " + Colors.BOLD+message+Colors.BOLD + " in " + cfg_data.irc_channel);
+			sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " makes me say \"" + Colors.BOLD+message+Colors.BOLD + "\" in " + cfg_data.irc_channel);
 		}
 	}
 
