@@ -515,6 +515,7 @@ public class Bot extends PircBot {
 					break;
 					// [DA] Get Memory stats too. Both RAM and SWAP will be printed
 					case ".mem":
+					case ".ram":
 						try {
 							Runtime r = Runtime.getRuntime();
 							Process p = r.exec(new String[]{"/bin/sh", "-c", "free -m | awk '/^Mem:/{rtotal=$2;rused=$3;rfree=$4+$7} END { print \"RAM: Free: \" rfree \"MB | Used: \" rused \"MB | Total: \" rtotal \"MB\" }' && free -m | awk '/^Swap:/{stotal=$2;sused=$3;sfree=$4} END { print \"SWAP: Free: \" sfree \"MB | Used: \" sused \"MB | Total: \" stotal \"MB\" }'"});
