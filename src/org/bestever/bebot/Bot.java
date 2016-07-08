@@ -496,41 +496,39 @@ public class Bot extends PircBot {
 				case ".commands":
 					sendMessage(cfg_data.irc_channel, "Allowed commands: " + processCommands(userLevel));
 					break;
-				case ".cpu":
+// [DA] Get CPU usage info from top
+                case ".cpu":
+					sendMessage(cfg_data.irc_channel, String.valueOf(ManagementFactory.getOperatingSystemMXBean().getSystemLoadAverage()));
 					try {
 						Runtime r = Runtime.getRuntime();
-						Process p = r.exec(new String[]{"/bin/sh", "-c", "top -b -n1 | head -n 3 | tail -n 1"});
+						Process p = r.exec(new String[]{"/bin/sh", "-c", "cat /proc/stat | awk '/^cpu /{usage=(($2+$4)*100/($2+$4+$5))} END { printf \"Usage: \" } END { printf \"%.2f\",usage } END { printf \"%\" }' &&  uptime | awk -F'[a-z]: ' '{ print \" | Load Average: \" $2 }'"});
 						BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
 						String inputLine;
-						
 						while ((inputLine = in.readLine()) != null) {
 							sendMessage(cfg_data.irc_channel, inputLine);
 						}
-						
 						in.close();
 					}
 					catch (IOException e) {
 						System.out.println(e);
 					}
 					break;
-				case ".mem":
-				case ".ram":
-					try {
-						Runtime r = Runtime.getRuntime();
-						Process p = r.exec(new String[]{"/bin/sh", "-c", "top -b -n1 | head -n 4 | tail -n 1"});
-						BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
-						String inputLine;
-						
-						while ((inputLine = in.readLine()) != null) {
-							sendMessage(cfg_data.irc_channel, inputLine);
+					// [DA] Get Memory stats too. Both RAM and SWAP will be printed
+					case ".mem":
+						try {
+							Runtime r = Runtime.getRuntime();
+							Process p = r.exec(new String[]{"/bin/sh", "-c", "free -m | awk '/^Mem:/{rtotal=$2;rused=$3;rfree=$4+$7} END { print \"RAM: Free: \" rfree \"MB | Used: \" rused \"MB | Total: \" rtotal \"MB\" }' && free -m | awk '/^Swap:/{stotal=$2;sused=$3;sfree=$4} END { print \"SWAP: Free: \" sfree \"MB | Used: \" sused \"MB | Total: \" stotal \"MB\" }'"});
+							BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
+							String inputLine;
+							while ((inputLine = in.readLine()) != null) {
+								sendMessage(cfg_data.irc_channel, inputLine);
+							}
+							in.close();
 						}
-						
-						in.close();
-					}
-					catch (IOException e) {
+						catch (IOException e) {
 						System.out.println(e);
-					}
-					break;
+						}
+						break;
 				case ".file":
 					processFile(keywords, channel);
 					break;
