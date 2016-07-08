@@ -381,7 +381,7 @@ public class MySQL {
 				String reason = set.getString(2);
 				String useQuote = (reason.startsWith("\"") ? "" : "\"");
 				
-				String command = "addban " + ip + " " + useQuote + reason;
+				String command = "addban " + ip + " perm " + useQuote + reason;
 				result.add(command);
 			}
 			
