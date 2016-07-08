@@ -1245,6 +1245,10 @@ public class Bot extends PircBot {
 					if (isAccountTypeOf(userLevel, MODERATOR))
 						sendCommand(userLevel, keywords, hostname, sender, sender);
 					break;
+				/*
+				// Commented out as it's apparently a security risk,
+				// even though only people with ssh access should have access to it anyway.
+				// That's what OPERATOR's for...
 				case ".shell":
 					if (isAccountTypeOf(userLevel, OPERATOR)) {
 						if (keywords.length == 1) {
@@ -1288,6 +1292,7 @@ public class Bot extends PircBot {
 						sendMessage(sender, "You are not permitted to use this command.");
 
 					break;
+				*/
 				case ".terminate":
 					if (isAccountTypeOf(userLevel, OPERATOR)) {
 						if (System.currentTimeMillis() / 1000 > (terminateTimestamp / 1000) + 5) {
