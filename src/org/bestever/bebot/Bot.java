@@ -1218,8 +1218,12 @@ public class Bot extends PircBot {
 						messageChannel(keywords, sender);
 					break;
 				case ".action":
-					if (isAccountTypeOf(userLevel, MODERATOR))
-						this.sendAction(cfg_data.irc_channel, Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
+				case ".act":
+					if (isAccountTypeOf(userLevel, MODERATOR)) {
+						String action = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
+						this.sendAction(cfg_data.irc_channel, action);
+						sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " sends channel action " + Colors.BOLD+action+Colors.BOLD);
+					}
 					break;
 				case ".purgebans":
 					if (isAccountTypeOf(userLevel, MODERATOR))
@@ -1295,6 +1299,7 @@ public class Bot extends PircBot {
 				*/
 				case ".terminate":
 					if (isAccountTypeOf(userLevel, OPERATOR)) {
+						sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " is trying to " +Colors.RED+Colors.BOLD+"terminate"+Colors.NORMAL+" me!!");
 						if (System.currentTimeMillis() / 1000 > (terminateTimestamp / 1000) + 5) {
 							terminateConfirmationTimes = 0;
 							terminateTimestamp = System.currentTimeMillis();
