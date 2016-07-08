@@ -742,6 +742,7 @@ public class Bot extends PircBot {
 		else {
 			String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
 			sendMessage(cfg_data.irc_channel, message);
+			sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " sends " + Colors.BOLD+message+Colors.BOLD + " to " + cfg_data.irc_channel + " via bot");
 		}
 	}
 
@@ -923,6 +924,7 @@ public class Bot extends PircBot {
 				killed++;
 			}
 
+			String plural = (killed == 1 ? "" : "s");
 			sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " kills all " + killed + Colors.BOLD + keywords[1] + Colors.BOLD + " servers");
 			sendMessage(cfg_data.irc_channel, "Killed a total of " + killed + " servers.");
 		}
@@ -947,7 +949,8 @@ public class Bot extends PircBot {
 				}
 				if (ports.size() > 0) {
 					sendMessage(cfg_data.irc_channel, Functions.pluralize("Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") +")", ports.size()));
-					sendLogUserMessage(Colors.BOLD + sender + Colors.BOLD + " kills their " + ports.size() + " servers");
+					String plural = (ports.size() == 1 ? "" : "s");
+					sendLogUserMessage(Colors.BOLD + sender + Colors.BOLD + " kills their " + ports.size() + " server" + plural);
 				}
 				else {
 					sendMessage(cfg_data.irc_channel, "You do not have any servers running.");
@@ -1173,8 +1176,9 @@ public class Bot extends PircBot {
 			int userLevel = MySQL.getLevel(hostname);
 			switch (keywords[0].toLowerCase()) {
 				case ".addban":
-					if (isAccountTypeOf(userLevel, MODERATOR) && keywords.length > 1)
+					if (isAccountTypeOf(userLevel, MODERATOR) && keywords.length > 1) {
 						MySQL.addBan(message.split(" ")[1], Functions.implode(Arrays.copyOfRange(message.split(" "), 2, message.split(" ").length), " "), sender);
+					}
 					break;
 				case ".addstartwad":
 					if (isAccountTypeOf(userLevel, MODERATOR) && keywords.length > 1)
@@ -1222,8 +1226,11 @@ public class Bot extends PircBot {
 						purgeBans(keywords[1]);
 					break;
 				case ".raw":
-					if (isAccountTypeOf(userLevel, ADMIN))
-						sendRawLine(Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
+					if (isAccountTypeOf(userLevel, ADMIN)) {
+						String line = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
+						sendRawLine(line);
+						sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " sends raw line " + Colors.BOLD+line);
+					}
 				case ".rejoin":
 					if (isAccountTypeOf(userLevel, ADMIN))
 						rejoinChannel();

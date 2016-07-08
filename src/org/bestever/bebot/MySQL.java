@@ -20,6 +20,8 @@ import java.security.NoSuchAlgorithmException;
 import java.sql.*;
 import java.util.*;
 
+import org.jibble.pircbot.Colors;
+
 import static org.bestever.bebot.Logger.*;
 
 /**
@@ -174,6 +176,7 @@ public class MySQL {
 				bot.sendMessage(sender, "Wad '" + filename + "' is not in the blacklist.");
 			else {
 				bot.sendMessage(sender, "Removed '" + filename + "' from the blacklist.");
+				bot.sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " removed WAD " + Colors.BOLD+filename+Colors.BOLD + " from the blacklist");
 			}
 		} catch (SQLException e) {
 			e.printStackTrace();
@@ -215,8 +218,10 @@ public class MySQL {
 				pst.setString(1, name);
 				pst.setString(2, md5);
 				int result = pst.executeUpdate();
-				if (result == 1)
+				if (result == 1) {
 					bot.sendMessage(sender, "Added '" + name + "' to the blacklist with hash " + md5);
+					bot.sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " adds WAD " + Colors.BOLD+filename+Colors.BOLD + " to the blacklist");
+				}
 				else
 					bot.sendMessage(sender, "There was an error adding the wad to the blacklist. Please contact an administrator.");
 			}
@@ -323,8 +328,15 @@ public class MySQL {
 			pst.setString(1, ip);
 			pst.setString(2, reason);
 			pst.setString(3, reason);
-			if (pst.executeUpdate() == 1)
+			if (pst.executeUpdate() == 1) {
 				bot.sendMessage(sender, "Added " + ip + " to banlist.");
+				bot.sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " adds IP " + Colors.BOLD+ip+Colors.BOLD + " to banlist with reason " + Colors.BOLD+reason);
+				List<Server> tempList = new LinkedList<>(bot.servers);
+				String useQuote = (reason.startsWith("\"") ? "" : "\"");
+				for (Server server : tempList) {
+					server.in.println("addban " + ip + " " + useQuote + reason );
+				}
+			}
 			else
 				bot.sendMessage(sender, "That IP address is already banned!");
 		} catch (SQLException e) {
@@ -350,11 +362,36 @@ public class MySQL {
 					server.in.println("delban " + ip);
 				}
 				bot.sendMessage(sender, "Removed " + ip + " from banlist.");
+				bot.sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " removes IP " + Colors.BOLD+ip+Colors.BOLD + " from banlist");
 			}
 		} catch (SQLException e) {
 			e.printStackTrace();
 			logMessage(LOGLEVEL_IMPORTANT, "Could not delete ip from banlist");
 		}
+	}
+	
+	public static ArrayList<String> getBanCommands() {
+		String query = "SELECT * FROM `" + mysql_db + "`.`banlist`";
+		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
+			ResultSet set = pst.executeQuery();
+			ArrayList<String> result = new ArrayList<String>();
+			
+			while (set.next()) {
+				String ip = set.getString(1);
+				String reason = set.getString(2);
+				String useQuote = (reason.startsWith("\"") ? "" : "\"");
+				
+				String command = "addban " + ip + " " + useQuote + reason;
+				result.add(command);
+			}
+			
+			return result;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			logMessage(LOGLEVEL_IMPORTANT, "Could not delete ip from banlist");
+		}
+		
+		return null;
 	}
 
 	/**

@@ -286,6 +286,8 @@ public class ServerProcess extends Thread {
 
 			server.bot.sendLogUserMessage(Colors.BOLD+server.sender+Colors.BOLD + " starts server with ID " + Colors.BOLD+server.server_id+Colors.BOLD);
 			
+			ArrayList<String> banCmds = MySQL.getBanCommands();
+			
 			// Process server while it outputs text
 			while ((strLine = br.readLine()) != null) {
 				String[] keywords = strLine.split(" ");
@@ -317,6 +319,14 @@ public class ServerProcess extends Thread {
 					server.bot.sendMessage(server.irc_channel, "Server started successfully on port " + server.port + "!");
 					server.bot.sendMessage(server.sender, "To kill your server, in the channel " + server.bot.cfg_data.irc_channel + ", type .killmine to kill all of your servers, or .kill " + server.port + " to kill just this one.");
 					server.bot.sendLogUserMessage(Colors.BOLD+server.sender+Colors.BOLD + "'s server with ID " + Colors.BOLD+server.server_id+Colors.BOLD + " has been assigned port " + Colors.BOLD+server.port+Colors.BOLD);
+					
+					if (banCmds != null) {
+						for (String command : banCmds) {
+							server.in.println(command);
+						}
+						
+						server.in.println("echo [TSPG] Applied " + banCmds.size() + " global bans");
+					}
 				}
 
 				// Check for banned players
