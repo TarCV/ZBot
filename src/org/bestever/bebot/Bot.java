@@ -167,6 +167,7 @@ public class Bot extends PircBot {
 		this.joinChannel(cfg_data.irc_channel);
 		this.joinChannel(cfg_data.log_channel);
 		
+		sendMessage(cfg_data.irc_channel, "Hello, world!");
 		sendLogInfoMessage("Bot started.");
 	}
 
