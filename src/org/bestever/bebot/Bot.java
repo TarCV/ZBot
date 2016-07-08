@@ -713,21 +713,21 @@ public class Bot extends PircBot {
 		logMessage(LOGLEVEL_TRIVIAL, "Displaying processComamnds().");
 		if (isAccountTypeOf(userLevel, OPERATOR))
 			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
-			" .host .kill .killall .killmine .killinactive .liststartwads .load " +
-			".notice .off .on .owner .protect .purgebans .query .rcon .reauth .reloadversions .save .send .servers .shell .slot .terminate .unbanwad " +
+			" .host .kill .killall .killmine .killinactive .liststartwads .load .mem " +
+			".notice .off .on .owner .protect .purgebans .query .rcon .reauth .reloadversions .save .send .servers .slot .terminate .unbanwad " +
 			".uptime .whoami";
 		else if (isAccountTypeOf(userLevel, ADMIN))
 			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
-					" .host .kill .killall .killmine .killinactive .liststartwads .load " +
+					" .host .kill .killall .killmine .killinactive .liststartwads .load .mem " +
 					".notice .off .on .owner .protect .purgebans .query .rcon .reauth .reloadversions .save .send .servers .slot .unbanwad .uptime .whoami";
 		else if (isAccountTypeOf(userLevel, MODERATOR))
 			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help .host" +
-					" .kill .killmine .killinactive .liststartwads .load " +
+					" .kill .killmine .killinactive .liststartwads .load .mem " +
 					".notice .owner .protect .purgebans .query .rcon .reauth .save .send .servers .slot .unbanwad .uptime .whoami";
 		else if (isAccountTypeOf(userLevel, REGISTERED))
-			return ".commands .cpu .file .get .help .host .kill .killmine .load .owner .query .rcon .save .servers .slot .uptime .whoami";
+			return ".commands .cpu .file .get .help .host .kill .killmine .load .mem .owner .query .rcon .save .servers .slot .uptime .whoami";
 		else
-			return "[Not logged in, guests have limited access] .commands .cpu .file .help .servers .uptime .whoami";
+			return "[Not logged in, guests have limited access] .commands .cpu .file .help .mem .servers .uptime .whoami";
 	}
 
 	/**
