@@ -331,11 +331,13 @@ public class MySQL {
 			if (pst.executeUpdate() == 1) {
 				bot.sendMessage(sender, "Added " + ip + " to banlist.");
 				bot.sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " adds IP " + Colors.BOLD+ip+Colors.BOLD + " to banlist with reason " + Colors.BOLD+reason);
+				/*
 				List<Server> tempList = new LinkedList<>(bot.servers);
 				String useQuote = (reason.startsWith("\"") ? "" : "\"");
 				for (Server server : tempList) {
-					server.in.println("addban " + ip + " " + useQuote + reason );
+					server.in.println("addban " + ip + " perm " + useQuote + reason );
 				}
+				*/
 			}
 			else
 				bot.sendMessage(sender, "That IP address is already banned!");
