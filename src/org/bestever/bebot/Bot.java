@@ -742,7 +742,7 @@ public class Bot extends PircBot {
 		else {
 			String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
 			sendMessage(cfg_data.irc_channel, message);
-			sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " sends " + Colors.BOLD+message+Colors.BOLD + " to " + cfg_data.irc_channel + " via bot");
+			sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " makes me say " + Colors.BOLD+message+Colors.BOLD + " in " + cfg_data.irc_channel);
 		}
 	}
 
@@ -1222,7 +1222,7 @@ public class Bot extends PircBot {
 					if (isAccountTypeOf(userLevel, MODERATOR)) {
 						String action = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
 						this.sendAction(cfg_data.irc_channel, action);
-						sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " sends channel action " + Colors.BOLD+action+Colors.BOLD);
+						sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " forces me to act out \"" + this.getNick() + " " + Colors.BOLD+action+Colors.BOLD + "\"");
 					}
 					break;
 				case ".purgebans":
