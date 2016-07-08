@@ -499,7 +499,6 @@ public class Bot extends PircBot {
 					break;
 // [DA] Get CPU usage info from top
                 case ".cpu":
-					sendMessage(cfg_data.irc_channel, String.valueOf(ManagementFactory.getOperatingSystemMXBean().getSystemLoadAverage()));
 					try {
 						Runtime r = Runtime.getRuntime();
 						Process p = r.exec(new String[]{"/bin/sh", "-c", "cat /proc/stat | awk '/^cpu /{usage=(($2+$4)*100/($2+$4+$5))} END { printf \"Usage: \" } END { printf \"%.2f\",usage } END { printf \"%\" }' &&  uptime | awk -F'[a-z]: ' '{ print \" | Load Average: \" $2 }'"});
