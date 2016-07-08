@@ -320,6 +320,7 @@ public class ServerProcess extends Thread {
 					server.bot.sendMessage(server.sender, "To kill your server, in the channel " + server.bot.cfg_data.irc_channel + ", type .killmine to kill all of your servers, or .kill " + server.port + " to kill just this one.");
 					server.bot.sendLogUserMessage(Colors.BOLD+server.sender+Colors.BOLD + "'s server with ID " + Colors.BOLD+server.server_id+Colors.BOLD + " has been assigned port " + Colors.BOLD+server.port+Colors.BOLD);
 					
+					/*
 					if (banCmds != null) {
 						for (String command : banCmds) {
 							server.in.println(command);
@@ -327,6 +328,7 @@ public class ServerProcess extends Thread {
 						
 						server.in.println("echo [TSPG] Applied " + banCmds.size() + " global bans");
 					}
+					*/
 				}
 
 				// Check for banned players
