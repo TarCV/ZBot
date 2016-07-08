@@ -442,7 +442,7 @@ public class Bot extends PircBot {
 							sendMessage(recipient, "Command successfully sent.");
 							
 							String logSender = (isHoster ? "their own" : Colors.BOLD + Functions.getUserName(s.irc_channel) + Colors.BOLD + "'s");
-							String logStr = Colors.BOLD + sender + Colors.BOLD + " sends command to " + logSender + " server on port " + port + ": " + message;
+							String logStr = Colors.BOLD + sender + Colors.BOLD + " sends to " + logSender + " server on port " + port + ": " + message;
 							
 							if (isHoster) {
 								sendLogUserMessage(logStr);
