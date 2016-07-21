@@ -400,11 +400,11 @@ public class Bot extends PircBot {
 				if (servers != null) {
 					String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
 					for (Server s : servers) {
-						s.in.println("echo <--> GLOBAL SERVICE ANNOUNCEMENT <-->");
-						s.in.println("say \\cf--------------\\cc");
-						s.in.println("say GLOBAL ANNOUNCEMENT: " + Functions.escapeQuotes(message) + "");
-						s.in.println("say \\cf--------------\\cc;");
-						s.in.println("echo <--> GLOBAL SERVICE ANNOUNCEMENT <-->");
+						s.in.println("echo <--> GLOBAL SERVICE ANNOUNCEMENT <-->\n");
+						s.in.println("say \\cf--------------\\cc\n");
+						s.in.println("say GLOBAL ANNOUNCEMENT: " + Functions.escapeQuotes(message) + "\n");
+						s.in.println("say \\cf--------------\\cc;\n");
+						s.in.println("echo <--> GLOBAL SERVICE ANNOUNCEMENT <-->\n");
 					}
 					sendMessage(cfg_data.irc_channel, "Global broadcast sent.");
 					sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " sends global announcement: " + message);
