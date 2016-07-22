@@ -531,6 +531,12 @@ public class Bot extends PircBot {
 				case ".file":
 					processFile(keywords, channel);
 					break;
+				case ".gc":
+					if (isAccountTypeOf(userLevel, ADMIN)) {
+						System.gc();
+						sendMessage(cfg_data.irc_channel, "Garbage was (hopefully) collected.");
+					}
+					break;
 				case ".get":
 					processGet(userLevel, keywords);
 					break;
