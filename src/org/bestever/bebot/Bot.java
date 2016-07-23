@@ -408,11 +408,9 @@ public class Bot extends PircBot {
 				if (servers != null) {
 					String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
 					for (Server s : servers) {
-						s.in.println("echo <--> GLOBAL SERVICE ANNOUNCEMENT <-->");
-						s.in.println("say \\cf--------------\\cc");
-						s.in.println("say GLOBAL ANNOUNCEMENT: " + Functions.escapeQuotes(message) + "");
-						s.in.println("say \\cf--------------\\cc;");
-						s.in.println("echo <--> GLOBAL SERVICE ANNOUNCEMENT <-->");
+						s.in.println("say \"\\cf--------------\\cc\";\n");
+						s.in.println("say \"GLOBAL ANNOUNCEMENT: " + Functions.escapeQuotes(message) + "\";\n");
+						s.in.println("say \"\\cf--------------\\cc\";\n");
 					}
 					sendMessage(cfg_data.irc_channel, "Global broadcast sent.");
 					sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " sends global announcement: " + message);
@@ -509,7 +507,7 @@ public class Bot extends PircBot {
                 case ".cpu":
 					try {
 						Runtime r = Runtime.getRuntime();
-						Process p = r.exec(new String[]{"/bin/sh", "-c", "cat /proc/stat | awk '/^cpu /{usage=(($2+$4)*100/($2+$4+$5))} END { printf \"Usage: \" } END { printf \"%.2f\",usage } END { printf \"%\" }' &&  uptime | awk -F'[a-z]: ' '{ print \" | Load Average: \" $2 }'"});
+						Process p = r.exec(new String[]{"/bin/sh", "-c", "top -bn2 | awk '/^%Cpu\\(s\\): /{usage=($2+$4)} END { printf \"Usage: \" } END { printf \"%.1f\",usage } END { printf \"%\" }' &&  uptime | awk -F'[a-z]: ' '{ print \" | Load Average: \" $2 }'"});
 						BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
 						String inputLine;
 						while ((inputLine = in.readLine()) != null) {
@@ -526,7 +524,7 @@ public class Bot extends PircBot {
 					case ".ram":
 						try {
 							Runtime r = Runtime.getRuntime();
-							Process p = r.exec(new String[]{"/bin/sh", "-c", "free -m | awk '/^Mem:/{rtotal=$2;rused=$3;rfree=$4+$7} END { print \"RAM: Free: \" rfree \"MB | Used: \" rused \"MB | Total: \" rtotal \"MB\" }' && free -m | awk '/^Swap:/{stotal=$2;sused=$3;sfree=$4} END { print \"SWAP: Free: \" sfree \"MB | Used: \" sused \"MB | Total: \" stotal \"MB\" }'"});
+							Process p = r.exec(new String[]{"/bin/sh", "-c", "free -m | awk '/^Mem:/{rtotal=$2;rused=$3;rfree=$4;rcache=$7} END { print \"RAM: Free: \" rfree \"MB | Used: \" rused \"MB | Cache: \" rcache \"MB | Total: \" rtotal \"MB\" }' && free -m | awk '/^Swap:/{stotal=$2;sused=$3;sfree=$4} END { print \"SWAP: Free: \" sfree \"MB | Used: \" sused \"MB | Total: \" stotal \"MB\" }'"});
 							BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
 							String inputLine;
 							while ((inputLine = in.readLine()) != null) {
@@ -540,6 +538,12 @@ public class Bot extends PircBot {
 						break;
 				case ".file":
 					processFile(keywords, channel);
+					break;
+				case ".gc":
+					if (isAccountTypeOf(userLevel, ADMIN)) {
+						System.gc();
+						sendMessage(cfg_data.irc_channel, "Garbage was (hopefully) collected.");
+					}
 					break;
 				case ".get":
 					processGet(userLevel, keywords);
@@ -822,10 +826,10 @@ public class Bot extends PircBot {
 					sendMessage(cfg_data.irc_channel, "You have reached your server limit (" + slots + ")");
 			}
 			else
-				sendMessage(cfg_data.irc_channel, "You must register with TSPG and be logged in to IRC to use the bot to host!");
+				sendMessage(cfg_data.irc_channel, "You must register with " + cfg_data.irc_name + " and be identified with NickServ to host! See http://allfearthesentinel.net/ under Getting Started");
 		}
 		else
-			sendMessage(cfg_data.irc_channel, "The bot is currently disabled from hosting for the time being. Sorry for any inconvenience!");
+			sendMessage(cfg_data.irc_channel, cfg_data.irc_name + " is currently disabled from hosting for the time being. Sorry for any inconvenience!");
 	}
 
 	/**
