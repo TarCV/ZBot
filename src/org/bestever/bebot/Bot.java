@@ -102,6 +102,8 @@ public class Bot extends PircBot {
 	private Boolean debugMode = false;
 
 	public VersionParser versionParser;
+	
+	public boolean recovering = false;
 
 	/**
 	 * Set the bot up with the constructor
@@ -169,6 +171,12 @@ public class Bot extends PircBot {
 		
 		sendMessage(cfg_data.irc_channel, "Hello, world!");
 		sendLogInfoMessage("Bot started.");
+		
+		if (MySQL.shouldRecover()) {
+			sendMessage(cfg_data.irc_channel, "Give me a second while I recover servers...");
+			int recovered = MySQL.doRecovery();
+			sendMessage(cfg_data.irc_channel, "Recovered " + recovered + " server(s).");
+		}
 	}
 
 	/**
@@ -809,7 +817,7 @@ public class Bot extends PircBot {
 				if (getUserServers(Functions.getUserName(hostname)) == null) userServers = 0;
 				else userServers = getUserServers(Functions.getUserName(hostname)).size();
 				if (slots > userServers)
-					Server.handleHostCommand(this, servers, channel, sender, hostname, message, userLevel, autoRestart, port);
+					Server.handleHostCommand(this, servers, channel, sender, hostname, message, userLevel, autoRestart, port, null);
 				else
 					sendMessage(cfg_data.irc_channel, "You have reached your server limit (" + slots + ")");
 			}
@@ -1319,10 +1327,14 @@ public class Bot extends PircBot {
 							}
 
 							else if (terminateConfirmationTimes == 1) {
-								sendMessage(sender, "The bot will close NOW!");
-								messageChannel(("- - The bot is closing now (terminate command issued by " + sender + ") -").split(" "), sender);
-								quitServer("Killed by " + sender);
-								System.exit(1);
+								if (MySQL.clearRecovery()) {
+									sendMessage(sender, "The bot will close NOW!");
+									messageChannel(("- - The bot is closing now (terminate command issued by " + sender + ") -").split(" "), sender);
+									quitServer("Killed by " + sender);
+									System.exit(1);
+								} else {
+									sendMessage(sender, "Failed to clear server recovery table.");
+								}
 							}
 						}
 

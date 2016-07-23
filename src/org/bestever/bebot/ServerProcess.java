@@ -281,10 +281,10 @@ public class ServerProcess extends Thread {
 			// If either criteria is met, the user will be messaged the RCON password
 			// NOTE: As of now, BE users can still check the RCON password by accessing the control panel on the website.
 			// We'll fix this later by changing the RCON from the unique_id to a random MD5 hash
-			if (server.bot.cfg_data.bot_public_rcon || AccountType.isAccountTypeOf(server.user_level, AccountType.RCON))
+			if (server.bot.cfg_data.bot_public_rcon || AccountType.isAccountTypeOf(server.user_level, AccountType.RCON) && !server.bot.recovering)
 				server.bot.sendMessage(server.sender, "Your unique server ID is: " + server.server_id + ". This is your RCON password, which can be used using 'send_password "+server.server_id+"' via the in-game console. You can view your logfile at http://static.allfearthesentinel.net/logs/" + server.server_id + ".txt");
 
-			server.bot.sendLogUserMessage(Colors.BOLD+server.sender+Colors.BOLD + " starts server with ID " + Colors.BOLD+server.server_id+Colors.BOLD);
+			if (!server.bot.recovering) server.bot.sendLogUserMessage(Colors.BOLD+server.sender+Colors.BOLD + " starts server with ID " + Colors.BOLD+server.server_id+Colors.BOLD);
 			
 			ArrayList<String> banCmds = MySQL.getBanCommands();
 			
@@ -316,9 +316,9 @@ public class ServerProcess extends Thread {
 					System.out.println(strLine);
 					server.bot.servers.add(server);
 					server.bot.vSHashmap.get(server.version.name).add(server);
-					server.bot.sendMessage(server.irc_channel, "Server started successfully on port " + server.port + "!");
-					server.bot.sendMessage(server.sender, "To kill your server, in the channel " + server.bot.cfg_data.irc_channel + ", type .killmine to kill all of your servers, or .kill " + server.port + " to kill just this one.");
-					server.bot.sendLogUserMessage(Colors.BOLD+server.sender+Colors.BOLD + "'s server with ID " + Colors.BOLD+server.server_id+Colors.BOLD + " has been assigned port " + Colors.BOLD+server.port+Colors.BOLD);
+					if (!server.bot.recovering) server.bot.sendMessage(server.irc_channel, "Server started successfully on port " + server.port + "!");
+					if (!server.bot.recovering) server.bot.sendMessage(server.sender, "To kill your server, in the channel " + server.bot.cfg_data.irc_channel + ", type .killmine to kill all of your servers, or .kill " + server.port + " to kill just this one.");
+					if (!server.bot.recovering) server.bot.sendLogUserMessage(Colors.BOLD+server.sender+Colors.BOLD + "'s server with ID " + Colors.BOLD+server.server_id+Colors.BOLD + " has been assigned port " + Colors.BOLD+server.port+Colors.BOLD);
 					
 					/*
 					if (banCmds != null) {

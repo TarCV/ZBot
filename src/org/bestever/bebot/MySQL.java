@@ -710,4 +710,102 @@ public class MySQL {
 			return null;
 		}
 	}
+	
+	public static void addServerToRecovery(Server server) {
+		String query = "INSERT INTO `" + mysql_db + "`.`server_recovery` VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE `uid` = ?, `hostcmd` = ?, `port` = ?, `owner`= ?";
+		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
+			pst.setString(1, server.server_id);
+			pst.setString(2, server.host_command);
+			pst.setInt(3, server.port);
+			pst.setString(4, getUsername(server.irc_hostname));
+			pst.setString(5, server.sender);
+			pst.setString(6, server.irc_hostname);
+			if (pst.executeUpdate() == 1) {
+				
+			}
+			else
+				bot.sendLogErrorMessage("Failed to add server to recovery: " + server.server_id);
+		} catch (SQLException e) {
+			e.printStackTrace();
+			logMessage(LOGLEVEL_IMPORTANT, "Could not add server to recovery");
+		}
+	}
+	
+	public static void removeServerFromRecovery(Server server) {
+		String query = "DELETE FROM `" + mysql_db + "`.`server_recovery` WHERE `uid`=?";
+		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
+			pst.setString(1, server.server_id);
+			if (pst.executeUpdate() == 1) {
+				
+			}
+			else
+				bot.sendLogErrorMessage("Failed to remove server from recovery: " + server.server_id);
+		} catch (SQLException e) {
+			e.printStackTrace();
+			logMessage(LOGLEVEL_IMPORTANT, "Could not remove server from recovery");
+		}
+	}
+	
+	public static boolean clearRecovery() {
+		String query = "TRUNCATE TABLE `" + mysql_db + "`.`server_recovery`";
+		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
+			if (pst.executeUpdate() == 1) {
+				return true;
+			}
+			else
+				bot.sendLogErrorMessage("Failed to clear recovery!!");
+		} catch (SQLException e) {
+			e.printStackTrace();
+			logMessage(LOGLEVEL_IMPORTANT, "Could not clear recovery");
+		}
+		
+		return false;
+	}
+	
+	public static boolean shouldRecover() {
+		String query = "SELECT COUNT(*) AS rowcount FROM `" + mysql_db + "`.`server_recovery`";
+		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
+			ResultSet set = pst.executeQuery();
+			
+			if (set.next()) {
+				return true;
+			}
+			return false;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			logMessage(LOGLEVEL_IMPORTANT, "Could not clear recovery");
+		}
+		return false;
+	}
+	
+	public static int doRecovery() {
+		String query = "SELECT COUNT(*) AS rowcount FROM `" + mysql_db + "`.`server_recovery`";
+		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
+			ResultSet set = pst.executeQuery();
+
+			bot.recovering = true;
+			int recovered = 0;
+			while (set.next()) {
+				String id = set.getString("uid");
+				String cmd = set.getString("hostcmd");
+				int port = set.getInt("port");
+				String owner = set.getString("owner");
+				String ownerNick = set.getString("owner_nick");
+				String ownerHostname = set.getString("owner_hostname");
+				
+				Server s = Server.handleHostCommand(bot, bot.servers, bot.cfg_data.irc_channel, ownerNick, ownerHostname, cmd, MySQL.getLevel(ownerHostname), false, port, id);
+				if (s != null) {
+					recovered++;
+				}
+			}
+			bot.recovering = false;
+			
+			return recovered;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			logMessage(LOGLEVEL_IMPORTANT, "Could not clear recovery");
+		}
+		
+		return -1;
+	}
 }
