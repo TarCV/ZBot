@@ -712,7 +712,7 @@ public class MySQL {
 	}
 	
 	public static void addServerToRecovery(Server server) {
-		String query = "INSERT INTO `" + mysql_db + "`.`server_recovery` VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE `uid` = ?, `hostcmd` = ?, `port` = ?, `owner`= ?, `owner_nick`=?, `owner_hostname`=?";
+		String query = "INSERT INTO `" + mysql_db + "`.`server_recovery` (`uid`, `hostcmd`, `port`, `owner`, `owner_nick`, `owner_hostname`) VALUES (?, ?, ?, ?, ?, ?)";
 		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
 			pst.setString(1, server.server_id);
 			pst.setString(2, server.host_command);
