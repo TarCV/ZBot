@@ -316,6 +316,7 @@ public class ServerProcess extends Thread {
 					System.out.println(strLine);
 					server.bot.servers.add(server);
 					server.bot.vSHashmap.get(server.version.name).add(server);
+					MySQL.addServerToRecovery(server);
 					if (!server.bot.recovering) server.bot.sendMessage(server.irc_channel, "Server started successfully on port " + server.port + "!");
 					if (!server.bot.recovering) server.bot.sendMessage(server.sender, "To kill your server, in the channel " + server.bot.cfg_data.irc_channel + ", type .killmine to kill all of your servers, or .kill " + server.port + " to kill just this one.");
 					if (!server.bot.recovering) server.bot.sendLogUserMessage(Colors.BOLD+server.sender+Colors.BOLD + "'s server with ID " + Colors.BOLD+server.server_id+Colors.BOLD + " has been assigned port " + Colors.BOLD+server.port+Colors.BOLD);
@@ -368,6 +369,7 @@ public class ServerProcess extends Thread {
 				bw.flush();
 			}
 
+			MySQL.removeServerFromRecovery(server);
 			server.bot.sendDebugMessage("Server possibly stopped.");
 			// Handle cleanup
 			dateNow = formatter.format(Calendar.getInstance().getTime());
