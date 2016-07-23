@@ -634,6 +634,11 @@ public class Bot extends PircBot {
 						sendMessage(cfg_data.irc_channel, "Debug mode is now " + (debugMode ? "en" : "dis") + "abled.");
 					}
 					break;
+				case ".addhost":
+					if (isAccountTypeOf(userLevel, MODERATOR) && keywords.length > 1) {
+						MySQL.addHost(message.split(" ")[1], Functions.implode(Arrays.copyOfRange(message.split(" "), 2, message.split(" ").length), " "), sender);
+					}
+					break;
 				default:
 					break;
 			}
@@ -702,7 +707,7 @@ public class Bot extends PircBot {
 		if (isAccountTypeOf(level, REGISTERED))
 			return "You are logged in as " + Functions.getUserName(hostname);
 		else
-			return "You are not logged in or do not have an account with TSPG. Please visit http://www.allfearthesentinel.net/ for instructions on how to register";
+			return "You are not logged in or do not have an account with TSPG. See http://allfearthesentinel.net/ under Getting Started";
 	}
 
 	/**
@@ -712,16 +717,16 @@ public class Bot extends PircBot {
 	private String processCommands(int userLevel) {
 		logMessage(LOGLEVEL_TRIVIAL, "Displaying processComamnds().");
 		if (isAccountTypeOf(userLevel, OPERATOR))
-			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
+			return ".addban .addhost .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
 			" .host .kill .killall .killmine .killinactive .liststartwads .load .mem " +
 			".notice .off .on .owner .protect .purgebans .query .rcon .reauth .reloadversions .save .send .servers .slot .terminate .unbanwad " +
 			".uptime .whoami";
 		else if (isAccountTypeOf(userLevel, ADMIN))
-			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
+			return ".addban .addhost .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
 					" .host .kill .killall .killmine .killinactive .liststartwads .load .mem " +
 					".notice .off .on .owner .protect .purgebans .query .rcon .reauth .reloadversions .save .send .servers .slot .unbanwad .uptime .whoami";
 		else if (isAccountTypeOf(userLevel, MODERATOR))
-			return ".addban .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help .host" +
+			return ".addban .addhost .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help .host" +
 					" .kill .killmine .killinactive .liststartwads .load .mem " +
 					".notice .owner .protect .purgebans .query .rcon .reauth .save .send .servers .slot .unbanwad .uptime .whoami";
 		else if (isAccountTypeOf(userLevel, REGISTERED))
@@ -1329,7 +1334,7 @@ public class Bot extends PircBot {
 					break;
 			}
 		} else {
-			sendMessage(sender, "Your account is not logged in properly to the IRC network. Please log in and re-query.");
+			sendMessage(sender, "You are not identified with NickServ. Please identify with NickServ and try again. If you have a custom hostmask, it may need to be whitelisted before you can register.");
 		}
 	}
 
