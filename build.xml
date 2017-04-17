@@ -43,6 +43,7 @@
                 classpathref="classpath"/>
         <copy todir="classes">
             <fileset dir="src">
+		<exclude name="src/.stversions/**"/>
             </fileset>
         </copy>
     </target>

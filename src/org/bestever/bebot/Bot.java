@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.management.ManagementFactory;
 import java.util.*;
+import java.net.*;
 
 import org.bestever.serverquery.QueryManager;
 import org.bestever.serverquery.ServerQueryRequest;
@@ -104,6 +105,8 @@ public class Bot extends PircBot {
 	public VersionParser versionParser;
 	
 	public boolean recovering = false;
+	
+	public boolean hasStarted = false;
 
 	/**
 	 * Set the bot up with the constructor
@@ -118,7 +121,7 @@ public class Bot extends PircBot {
 		Logger.setLogFile(cfg_data.bot_logfile);
 
 		// Parse versions.json
-		versionParser = new VersionParser(cfgfile.filepath);
+		versionParser = new VersionParser(cfg_data.bot_versionsfile, this);
 
 		// Set up the bot and join the channel
 		logMessage(LOGLEVEL_IMPORTANT, "Initializing BestBot v" + cfg_data.irc_version);
@@ -166,17 +169,23 @@ public class Bot extends PircBot {
 	 * Called when the bot connects to the irc server
 	 */
 	public void onConnect() {
+		// Set up MySQL (Just in case it didn't before it connected)
+		 MySQL.setMySQL(this, cfg_data.mysql_host, cfg_data.mysql_user, cfg_data.mysql_pass, cfg_data.mysql_port, cfg_data.mysql_db);
+		 
 		this.joinChannel(cfg_data.irc_channel);
 		this.joinChannel(cfg_data.log_channel);
+		
+		setMessageDelay(500);
 		
 		sendMessage(cfg_data.irc_channel, "Hello, world!");
 		sendLogInfoMessage("Bot started.");
 		
-		if (MySQL.shouldRecover()) {
-			sendMessage(cfg_data.irc_channel, "Give me a second while I recover servers...");
-			int recovered = MySQL.doRecovery();
-			sendMessage(cfg_data.irc_channel, "Recovered " + recovered + " server(s).");
+		if (!hasStarted && MySQL.shouldRecover()) {
+			sendMessage(cfg_data.irc_channel, "Recovering Servers, Please Wait!");
+			sendMessage(cfg_data.irc_channel, "Note: All server passwords will be reset to defaults.");
+			MySQL.doRecovery();
 		}
+		hasStarted = true;
 	}
 
 	/**
@@ -219,18 +228,18 @@ public class Bot extends PircBot {
 	 */
 	public void addExtraWad(String wad, String sender) {
 		if (!Functions.fileExists(cfg_data.bot_wad_directory_path + wad)) {
-			sendMessage(sender, "Cannot add " + wad + " as it does not exist.");
+			sendMessage(sender, "Error: file " + wad + " does not exist!");
 			return;
 		}
 		for (String listWad : cfg_data.bot_extra_wads) {
 			if (listWad.equalsIgnoreCase(wad)) {
-				sendMessage(sender, "Cannot add " + listWad + " as it already exists in the wad startup list.");
+				sendMessage(sender, "Error: file " + listWad + " is already in the startup list!");
 				return;
 			}
 		}
 		cfg_data.bot_extra_wads.add(wad);
-		sendMessage(sender, "Added " + wad + " to the wad startup list.");
-		sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " adds " + Colors.BOLD + wad + Colors.BOLD + " to the startup WAD list");
+		sendMessage(sender, "Added " + wad + " to the startup list!");
+		sendLogModeratorMessage(Colors.BOLD + sender + Colors.BOLD + " adds " + Colors.BOLD + wad + Colors.BOLD + " to the startup WAD list");
 	}
 
 	/**
@@ -241,12 +250,12 @@ public class Bot extends PircBot {
 		for (String listWad : cfg_data.bot_extra_wads) {
 			if (listWad.equalsIgnoreCase(wad)) {
 				cfg_data.bot_extra_wads.remove(wad);
-				sendMessage(sender, "Wad " + wad + " was removed from the wad startup list.");
-				sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " removes " + Colors.BOLD + wad + Colors.BOLD + " from the startup WAD list");
+				sendMessage(sender, "Removed " + wad + " from the startup list!");
+				sendLogModeratorMessage(Colors.BOLD + sender + Colors.BOLD + " removes " + Colors.BOLD + wad + Colors.BOLD + " from the startup WAD list");
 				return;
 			}
 		}
-		sendMessage(sender, "Wad " + wad + " was not found in the wad startup list.");
+		sendMessage(sender, "Error: file " + wad + " was not found in the startup list!");
 	}
 
 	/**
@@ -306,6 +315,19 @@ public class Bot extends PircBot {
 		}
 		return serverList;
 	}
+	
+	public List<Server> getAllServers() {
+		if (servers == null || servers.isEmpty())
+			return null;
+		Server desiredServer;
+		ListIterator<Server> it = servers.listIterator();
+		List<Server> serverList = new ArrayList<>();
+		while (it.hasNext()) {
+			desiredServer = it.next();
+			serverList.add(desiredServer);
+		}
+		return serverList;
+	}
 
 	/**
 	 * This searches through the linkedlist to kill the server on that port,
@@ -314,11 +336,11 @@ public class Bot extends PircBot {
 	 * removal from the linkedlist.
 	 * @param portString The port desired to kill
 	 */
-	private void killServer(String portString, String sender) {
+	private void killServer(String portString, String sender, String channel) {
 		logMessage(LOGLEVEL_NORMAL, "Killing server on port " + portString + ".");
 		// Ensure it is a valid port
 		if (!Functions.isNumeric(portString)) {
-			sendMessage(cfg_data.irc_channel, "Invalid port number (" + portString + "), not terminating server.");
+			sendMessage(channel, "Invalid port number (" + portString + "), not terminating server.");
 			return;
 		}
 
@@ -327,7 +349,7 @@ public class Bot extends PircBot {
 
 		// Handle users sending in a small value (thus saving time
 		if (port < min_port) {
-			sendMessage(cfg_data.irc_channel, "Invalid port number (ports start at " + min_port + "), not terminating server.");
+			sendMessage(channel, "Invalid port number (ports start at " + min_port + "), not terminating server.");
 			return;
 		}
 
@@ -336,92 +358,77 @@ public class Bot extends PircBot {
 		if (targetServer != null) {
 			targetServer.auto_restart = false;
 			String owner = targetServer.sender;
-			sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " requests kill of " + Colors.BOLD + owner + Colors.BOLD + "'s server on port "+ Colors.BOLD + portString + Colors.BOLD);
+			sendLogModeratorMessage(Colors.BOLD + sender + Colors.BOLD + " requests kill of " + Colors.BOLD + owner + Colors.BOLD + "'s server on port "+ Colors.BOLD + portString + Colors.BOLD);
 			targetServer.killServer();
 		}
 		else
-			sendMessage(cfg_data.irc_channel, "Could not find a server with the port " + port + "!");
+			sendMessage(channel, "Error: Could not find a server with the port " + port + "!");
 	}
 
 	/**
 	 * Toggles the auto-restart feature on or off
-	 * @param level int - the user's level (bitmask)
 	 * @param keywords String[] - array of words in message sent
 	 */
-	private void toggleAutoRestart(int level, String[] keywords) {
-		if (isAccountTypeOf(level, MODERATOR)) {
-			if (keywords.length == 2) {
-				if (Functions.isNumeric(keywords[1])) {
-					Server s = getServer(Integer.parseInt(keywords[1]));
-					if (s.auto_restart) {
-						s.auto_restart = false;
-						sendMessage(cfg_data.irc_channel, "Autorestart disabled on server.");
-					}
-					else {
-						s.auto_restart = true;
-						sendMessage(cfg_data.irc_channel, "Autorestart set up on server.");
-					}
+/*
+	private void toggleAutoRestart(String[] keywords, String channel) {
+		if (keywords.length == 2) {
+			if (Functions.isNumeric(keywords[1])) {
+				Server s = getServer(Integer.parseInt(keywords[1]));
+				if (s.auto_restart) {
+					s.auto_restart = false;
+					sendMessage(channel, "Autorestart disabled on server.");
+				}
+				else {
+					s.auto_restart = true;
+					sendMessage(channel, "Autorestart set up on server.");
 				}
 			}
-			else
-				sendMessage(cfg_data.irc_channel, "Correct usage is .autorestart <port>");
 		}
 		else
-			sendMessage(cfg_data.irc_channel, "You do not have permission to use this command.");
+			sendMessage(channel, "Correct usage is .autorestart <port>");
 	}
-
+*/
 	/**
 	 * Toggles the protected server state on or off (protected servers are immune to killinactive)
-	 * @param level int - the user's level (bitmask)
 	 * @param keywords String[] - array of words in message sent
 	 */
-	private void protectServer(int level, String[] keywords) {
-		if (isAccountTypeOf(level, MODERATOR)) {
-			if (keywords.length == 2) {
-				if (Functions.isNumeric(keywords[1])) {
-					Server s = getServer(Integer.parseInt(keywords[1]));
-					if (s.protected_server) {
-						s.protected_server = false;
-						sendMessage(cfg_data.irc_channel, "Kill protection disabled.");
-					}
-					else {
-						s.protected_server = true;
-						sendMessage(cfg_data.irc_channel, "Kill protection enabled.");
-					}
+	private void protectServer(String[] keywords, String channel) {
+		if (keywords.length == 2) {
+			if (Functions.isNumeric(keywords[1])) {
+				Server s = getServer(Integer.parseInt(keywords[1]));
+				if (s.protected_server) {
+					s.protected_server = false;
+					sendMessage(channel, "Kill protection disabled.");
+				}
+				else {
+					s.protected_server = true;
+					sendMessage(channel, "Kill protection enabled.");
 				}
 			}
-			else
-				sendMessage(cfg_data.irc_channel, "Correct usage is .protect <port>");
 		}
 		else
-			sendMessage(cfg_data.irc_channel, "You do not have permission to use this command.");
+			sendMessage(channel, "Correct usage is .protect <port>");
 	}
 
 	/**
 	 * Sends a message to all servers
-	 * @param level int - the user's level
 	 * @param keywords String[] - array of words in message sent
 	 */
-	private void globalBroadcast(int level, String[] keywords, String sender) {
-		if (isAccountTypeOf(level, MODERATOR)) {
-			if (keywords.length > 1) {
-				if (servers != null) {
-					String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
-					for (Server s : servers) {
-						s.in.println("say \"\\cf--------------\\cc\";\n");
-						s.in.println("say \"GLOBAL ANNOUNCEMENT: " + Functions.escapeQuotes(message) + "\";\n");
-						s.in.println("say \"\\cf--------------\\cc\";\n");
-					}
-					sendMessage(cfg_data.irc_channel, "Global broadcast sent.");
-					sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " sends global announcement: " + message);
+	private void globalBroadcast(String[] keywords, String sender, String channel) {
+		if (keywords.length > 1) {
+			if (servers != null) {
+				String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
+				for (Server s : servers) {
+					s.in.flush(); s.in.println("say \"\\cf--------------\\cc\";\n");
+					s.in.flush(); s.in.println("say \"GLOBAL ANNOUNCEMENT: " + Functions.escapeQuotes(message) + "\";\n");
+					s.in.flush(); s.in.println("say \"\\cf--------------\\cc\";\n");
 				}
-				else {
-					sendMessage(cfg_data.irc_channel, "There are no servers running at the moment.");
-				}
+				sendMessage(channel, "Global broadcast sent.");
+				sendLogModeratorMessage(Colors.BOLD + sender + Colors.BOLD + " sends global announcement: " + message);
 			}
-		}
-		else {
-			sendMessage(cfg_data.irc_channel, "You do not have the required privileges to send a broadcast.");
+			else {
+				sendMessage(channel, "There are no servers running at the moment.");
+			}
 		}
 	}
 
@@ -432,41 +439,83 @@ public class Bot extends PircBot {
 	 * @param recipient String - who to return the message to (since this can be accessed via PM as well as channel)
 	 */
 	private void sendCommand(int level, String[] keywords, String hostname, String recipient, String sender) {
-		if (isAccountTypeOf(level, REGISTERED)) {
-			if (keywords.length > 2) {
-				if (Functions.isNumeric(keywords[1])) {
-					int port = Integer.parseInt(keywords[1]);
-					String message = Functions.implode(Arrays.copyOfRange(keywords, 2, keywords.length), " ");
-					Server s = getServer(port);
-					if (s != null) {
-						boolean isHoster = Functions.getUserName(s.irc_hostname).equals(Functions.getUserName(hostname));
-						if (isHoster || isAccountTypeOf(level, MODERATOR)) {
-							s.in.println(message);
-							if (keywords[2].equalsIgnoreCase("sv_rconpassword") && keywords.length > 2) {
-								s.rcon_password = keywords[3];
-							}
-							sendMessage(recipient, "Command successfully sent.");
-							
-							String logSender = (isHoster ? "their own" : Colors.BOLD + Functions.getUserName(s.irc_channel) + Colors.BOLD + "'s");
-							String logStr = Colors.BOLD + sender + Colors.BOLD + " sends to " + logSender + " server on port " + port + ": " + message;
-							
-							if (isHoster) {
-								sendLogUserMessage(logStr);
-							} else {
-								sendLogAdminMessage(logStr);
-							}
+		if (keywords.length > 2) {
+			if (Functions.isNumeric(keywords[1])) {
+				int port = Integer.parseInt(keywords[1]);
+				Server s = getServer(port);
+				if (s != null) {
+					boolean isHoster = Functions.getUserName(s.irc_hostname).equals(Functions.getUserName(hostname));
+					if (isHoster || isAccountTypeOf(level, MODERATOR)) {
+						String entireMessage = Functions.implode(Arrays.copyOfRange(keywords, 2, keywords.length), " ");
+						String thisMessage = entireMessage.split(";")[0]; // Only send the first message because stacked messages break somehow.. :/
+						thisMessage = thisMessage.replaceAll("^\\s+","");
+						String[] thisKeywords = thisMessage.split(" ");
+						String command = thisKeywords[0];
+						String args = Functions.implode(Arrays.copyOfRange(thisKeywords, 1, thisKeywords.length), " ");
+						if (command.equalsIgnoreCase("sv_hostname")) {
+							args = args.replace("$brand",cfg_data.bot_hostname_base);
 						}
+						if (args != "" && (command.equalsIgnoreCase("sv_hostname") || command.equalsIgnoreCase("echo") || command.equalsIgnoreCase("say"))) {
+							args = Functions.escapeQuotes(args);
+							args = "\""+args+"\"";
+						}
+						{
+							s.in.flush(); s.in.println("echo \"-> " + command + " " + Functions.escapeQuotes(args) + " (RCON by " + sender + " - " + cfg_data.irc_name + ")\";\n");
+							s.in.flush(); s.in.println(command + " " + args + ";\n");
+						}
+						sendMessage(recipient, "Command '"+thisMessage+"' sent.");
+						String logSender = (isHoster ? "their own" : Colors.BOLD + Functions.getUserName(s.irc_hostname) + Colors.BOLD + "'s");
+						String logStr = Colors.BOLD + sender + Colors.BOLD + " sends to " + logSender + " server on port " + port + ": " + thisMessage;
+						if (isHoster)
+							sendLogUserMessage(logStr);
 						else
-							sendMessage(recipient, "You do not own this server.");
+							sendLogModeratorMessage(logStr);
 					}
 					else
-						sendMessage(recipient, "Server does not exist.");
+						sendMessage(recipient, "You do not own this server.");
 				}
 				else
-					sendMessage(recipient, "Port must be a number!");
+					sendMessage(recipient, "Server does not exist.");
 			}
 			else
-				sendMessage(recipient, "Incorrect syntax! Correct syntax is .send <port> <command>");
+				sendMessage(recipient, "Port must be a number!");
+		}
+		else
+			sendMessage(recipient, "Incorrect syntax! Correct syntax is .send <port> <command>");
+	}
+	
+	/**
+	 * Sends a command to all servers
+	 * @param keywords String[] - array of words in message sent
+	 */
+	private void sendCommandAll(String[] keywords, String sender, String channel) {
+		if (keywords.length > 1) {
+			if (servers != null) {
+				String entireMessage = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
+				String thisMessage = entireMessage.split(";")[0]; // Only send the first message because stacked messages break somehow.. :/
+				thisMessage = thisMessage.replaceAll("^\\s+","");
+				String[] thisKeywords = thisMessage.split(" ");
+				String command = thisKeywords[0];
+				String args = Functions.implode(Arrays.copyOfRange(thisKeywords, 1, thisKeywords.length), " ");
+				if (args != "" && (command.equalsIgnoreCase("sv_hostname") || command.equalsIgnoreCase("sv_website") || command.equalsIgnoreCase("logfile"))) {
+					sendMessage(channel, "Error: Command " + command + " is not allowed to be sent to all servers");
+				}
+				else {
+					if (args != "" && (command.equalsIgnoreCase("sv_hostname") || command.equalsIgnoreCase("echo") || command.equalsIgnoreCase("say"))) {
+						args = Functions.escapeQuotes(args);
+						args = "\""+args+"\"";
+					}
+					for (Server s : servers) {
+						s.in.flush(); s.in.println("echo \"-> " + command + " " + Functions.escapeQuotes(args) + " (RCON by " + sender + " - " + cfg_data.irc_name + ")\";\n");
+						s.in.flush(); s.in.println(command + " " + args + ";\n");
+					}
+					sendMessage(channel, "Command '"+thisMessage+"' sent to all servers.");
+					sendLogModeratorMessage(Colors.BOLD + sender + Colors.BOLD + " sends to all servers: " + thisMessage);
+				}
+			}
+			else {
+				sendMessage(channel, "There are no servers running at the moment.");
+			}
 		}
 	}
 
@@ -486,196 +535,498 @@ public class Bot extends PircBot {
 			if (!Functions.checkLoggedIn(hostname))
 				if (!MySQL.getUsername(hostname).equals("None"))
 					hostname = MySQL.getUsername(hostname);
+			hostname = hostname.replace(".users.zandronum.com","");
 
 			// Perform function based on input (note: login is handled by the MySQL function/class); also mostly in alphabetical order for convenience
 			int userLevel = MySQL.getLevel(hostname);
 			switch (keywords[0].toLowerCase()) {
-				case ".versions":
-					for (Version v : versionParser.list)
-						sendMessage(cfg_data.irc_channel, String.format("%s %s - %s", v.name, (v.isDefault ? "(default)" : ""), v.description));
-					break;
-				case ".autorestart":
-					toggleAutoRestart(userLevel, keywords);
-					break;
-				case ".broadcast":
-					globalBroadcast(userLevel, keywords, sender);
-					break;
 				case ".commands":
-					sendMessage(cfg_data.irc_channel, "Allowed commands: " + processCommands(userLevel));
+					sendMessage(channel, processCommands(userLevel));
 					break;
-// [DA] Get CPU usage info from top
-                case ".cpu":
-					try {
-						Runtime r = Runtime.getRuntime();
-						Process p = r.exec(new String[]{"/bin/sh", "-c", "top -bn2 | awk '/^%Cpu\\(s\\): /{usage=($2+$4)} END { printf \"Usage: \" } END { printf \"%.1f\",usage } END { printf \"%\" }' &&  uptime | awk -F'[a-z]: ' '{ print \" | Load Average: \" $2 }'"});
-						BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
-						String inputLine;
-						while ((inputLine = in.readLine()) != null) {
-							sendMessage(cfg_data.irc_channel, inputLine);
-						}
-						in.close();
-					}
-					catch (IOException e) {
-						System.out.println(e);
-					}
-					break;
-					// [DA] Get Memory stats too. Both RAM and SWAP will be printed
-					case ".mem":
-					case ".ram":
-						try {
-							Runtime r = Runtime.getRuntime();
-							Process p = r.exec(new String[]{"/bin/sh", "-c", "free -m | awk '/^Mem:/{rtotal=$2;rused=$3;rfree=$4;rcache=$7} END { print \"RAM: Free: \" rfree \"MB | Used: \" rused \"MB | Cache: \" rcache \"MB | Total: \" rtotal \"MB\" }' && free -m | awk '/^Swap:/{stotal=$2;sused=$3;sfree=$4} END { print \"SWAP: Free: \" sfree \"MB | Used: \" sused \"MB | Total: \" stotal \"MB\" }'"});
-							BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
-							String inputLine;
-							while ((inputLine = in.readLine()) != null) {
-								sendMessage(cfg_data.irc_channel, inputLine);
-							}
-							in.close();
-						}
-						catch (IOException e) {
-						System.out.println(e);
-						}
-						break;
 				case ".file":
 					processFile(keywords, channel);
 					break;
-				case ".gc":
-					if (isAccountTypeOf(userLevel, ADMIN)) {
-						System.gc();
-						sendMessage(cfg_data.irc_channel, "Garbage was (hopefully) collected.");
-					}
-					break;
 				case ".get":
-					processGet(userLevel, keywords);
+					processGet(keywords, channel);
 					break;
 				case ".help":
 					if (cfg_data.bot_help != null)
-						sendMessage(cfg_data.irc_channel, cfg_data.bot_help);
+						sendMessage(channel, cfg_data.bot_help);
 					else
-						sendMessage(cfg_data.irc_channel, "There is no helpfile.");
-					break;
-				case ".host":
-					processHost(userLevel, channel, sender, hostname, message, false, getMinPort());
-					break;
-				case ".kill":
-					processKill(userLevel, keywords, hostname, sender);
-					break;
-				case ".killall":
-					processKillAll(userLevel);
-					break;
-				case ".killversion":
-					processKillVersion(userLevel, keywords, sender);
-					break;
-				case ".killmine":
-					processKillMine(userLevel, hostname, sender);
-					break;
-				case ".killinactive":
-					processKillInactive(userLevel, keywords);
-					break;
-				case ".liststartwads":
-					sendMessage(cfg_data.irc_channel, "These wads are automatically loaded when a server is started: " + Functions.implode(cfg_data.bot_extra_wads, ", "));
-					break;
-				case ".load":
-					MySQL.loadSlot(hostname, keywords, userLevel, channel, sender);
-					break;
-				case ".notice":
-					setNotice(keywords, userLevel, sender);
-					break;
-				case ".off":
-					processOff(userLevel, sender);
-					break;
-				case ".on":
-					processOn(userLevel, sender);
+						sendMessage(channel, "Error: No help available.");
 					break;
 				case ".owner":
-					processOwner(userLevel, keywords);
-					break;
-				case ".protect":
-					protectServer(userLevel, keywords);
-					break;
-				case ".query":
-					handleQuery(userLevel, keywords);
-					break;
-				case ".rcon":
-					if (isAccountTypeOf(userLevel, REGISTERED))
-						sendMessage(cfg_data.irc_channel, "Please PM the bot for the rcon.");
-					break;
-				case ".reloadconfig":
-					if (isAccountTypeOf(userLevel, ADMIN)) {
-						reloadConfigFile();
-						sendMessage(cfg_data.irc_channel, "Configuration file has been successfully reloaded.");
-					}
-					break;
-				case ".reloadversions":
-					if (isAccountTypeOf(userLevel, ADMIN)) {
-						versionParser.load();
-						sendMessage(cfg_data.irc_channel, "Versions file has been successfully reloaded.");
-					}
-					break;
-				case ".reauth":
-					if (isAccountTypeOf(userLevel, MODERATOR)) {
-						changeNick(cfg_data.irc_name);
-                        sendRawLine("NICKSERV IDENTIFY " + cfg_data.irc_pass);
-					}
-					break;
-				case ".save":
-					MySQL.saveSlot(hostname, keywords);
-					break;
-				case ".send":
-					if (isAccountTypeOf(userLevel, ADMIN))
-						sendCommand(userLevel, keywords, hostname, cfg_data.irc_channel, sender);
+					processOwner(keywords, channel);
 					break;
 				case ".servers":
-					processServers(keywords);
-					break;
-				case ".slot":
-					MySQL.showSlot(hostname, keywords);
+					processServers(keywords, channel);
 					break;
 				case ".uptime":
 					if (keywords.length == 1)
-						sendMessage(cfg_data.irc_channel, "I have been running for " + Functions.calculateTime(System.currentTimeMillis() - time_started));
+						sendMessage(channel, "I have been running for " + Functions.calculateTime(System.currentTimeMillis() - time_started));
 					else
-						calculateUptime(keywords[1]);
+						calculateUptime(keywords[1], channel);
 					break;
 				case ".whoami":
-					sendMessage(cfg_data.irc_channel, getLoggedIn(hostname, userLevel));
+					sendMessage(channel, getLoggedIn(hostname, userLevel));
 					break;
-				case ".debug":
-					if (isAccountTypeOf(userLevel, MODERATOR)) {
-						debugMode = !debugMode;
-						sendMessage(cfg_data.irc_channel, "Debug mode is now " + (debugMode ? "en" : "dis") + "abled.");
-					}
+				case ".liststartwads":
+					sendMessage(channel, "These wads are automatically loaded when a server is started: " + Functions.implode(cfg_data.bot_extra_wads, ", "));
 					break;
-				case ".addhost":
-					if (isAccountTypeOf(userLevel, MODERATOR) && keywords.length > 1) {
-						MySQL.addHost(message.split(" ")[1], Functions.implode(Arrays.copyOfRange(message.split(" "), 2, message.split(" ").length), " "), sender);
-					}
+				case ".versions":
+					for (Version v : versionParser.list)
+						sendMessage(channel, String.format("%s %s - %s", v.name, (v.isDefault ? "(default)" : ""), v.description));
 					break;
 				default:
 					break;
 			}
+			if (userLevel >= 1) { // REGISTERED
+				switch (keywords[0].toLowerCase()) {
+					case ".getinfo":
+						processServerInfo(userLevel, keywords, sender, hostname);
+						break;
+					case ".host":
+						processHost(userLevel, channel, sender, hostname, message, false, getMinPort());
+						break;
+					case ".kill":
+						processKill(userLevel, keywords, hostname, sender, channel);
+						break;
+					case ".killmine":
+						processKillMine(hostname, sender, channel);
+						break;
+					case ".load":
+						MySQL.loadSlot(hostname, keywords, userLevel, channel, sender);
+						break;
+					case ".save":
+						sendMessage(channel, "Please update slots at " + cfg_data.website_link + "/account");
+//						MySQL.saveSlot(hostname, keywords);
+						break;
+					case ".slot":
+						MySQL.showSlot(hostname, keywords, channel);
+						break;
+//					case ".query":
+//						handleQuery(keywords);
+//						break;
+					case ".send":
+						sendCommand(userLevel, keywords, hostname, channel, sender);
+						break;
+					case ".rcon":
+					case ".logfile":
+					case ".passwords":
+						sendMessage(channel, "Please use .getinfo <port> instead");
+						break;
+					default:
+						break;
+				}
+			}
+			else if (userLevel < 1) {
+				switch (keywords[0].toLowerCase()) {
+					case ".getinfo":
+					case ".host":
+					case ".kill":
+					case ".killmine":
+					case ".load":
+//					case ".query":
+					case ".save":
+					case ".slot":
+					case ".rcon":
+					case ".logfile":
+					case ".passwords":
+						if (userLevel == 0)
+							sendMessage(channel, "Error: You are banned from using this service");
+						else if (userLevel < 0)
+							sendMessage(channel, "Error: You are either not logged in with NickServ or your account is not registered with " + cfg_data.service_short + " - See " + cfg_data.website_link + "/register");
+						break;
+					default:
+						break;
+				}
+			}
+			if (userLevel >= 2) { // VIP
+				switch (keywords[0].toLowerCase()) {
+//					case ".autorestart":
+//						toggleAutoRestart(keywords, channel);
+//						break;
+					case ".cpu":
+						try {
+							URL url;
+							if (keywords.length > 1 && keywords[1] != null && !keywords[1].isEmpty()) {
+								url = new URL("http://127.0.0.1/bot/cpu?port=" + keywords[1]);
+							}
+							else {
+								url = new URL("http://127.0.0.1/bot/cpu");
+							}
+							URLConnection yc = url.openConnection();
+							BufferedReader in = new BufferedReader(new InputStreamReader(yc.getInputStream()));
+							String inputLine;
+							while ((inputLine = in.readLine()) != null) {
+								sendMessage(channel, inputLine);
+							}
+							in.close();
+						}
+						catch (IOException e) {
+							System.out.println(e);
+						}
+						break;
+					case ".mem":
+					case ".ram":
+						try {
+							URL url;
+							if (keywords.length > 1 && keywords[1] != null && !keywords[1].isEmpty()) {
+								url = new URL("http://127.0.0.1/bot/mem?port=" + keywords[1]);
+							}
+							else {
+								url = new URL("http://127.0.0.1/bot/mem");
+							}
+							URLConnection yc = url.openConnection();
+							BufferedReader in = new BufferedReader(new InputStreamReader(yc.getInputStream()));
+							String inputLine;
+							while ((inputLine = in.readLine()) != null) {
+								sendMessage(channel, inputLine);
+							}
+							in.close();
+						}
+						catch (IOException e) {
+							System.out.println(e);
+						}
+						break;
+					case ".protect":
+						protectServer(keywords, channel);
+						break;
+					default:
+						break;
+				}
+			}
+			else if (userLevel < 2) {
+				switch (keywords[0].toLowerCase()) {
+//					case ".autorestart":
+					case ".cpu":
+					case ".mem":
+					case ".protect":
+						sendMessage(channel, "Error: You do not have permission to use that command!");
+						break;
+					default:
+						break;
+				}
+			}
+			if (userLevel >= 3) { // MODERATOR
+				switch (keywords[0].toLowerCase()) {
+					case ".broadcast":
+						globalBroadcast(keywords, sender, channel);
+						break;
+					case ".killinactive":
+						processKillInactive(keywords, sender, channel);
+						break;
+					default:
+						break;
+				}
+			}
+			else if (userLevel < 3) {
+				switch (keywords[0].toLowerCase()) {
+					case ".broadcast":
+					case ".killinactive":
+						sendMessage(channel, "Error: You do not have permission to use that command!");
+						break;
+					default:
+						break;
+				}
+			}
+			if (userLevel >= 4) { // ADMIN
+				switch (keywords[0].toLowerCase()) {
+					case ".killall":
+						processKillAll(sender, channel);
+						break;
+					case ".killversion":
+						processKillVersion(keywords, sender, channel);
+						break;
+					case ".notice":
+						setNotice(keywords, userLevel, channel);
+						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " sets notice to " + Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
+						break;
+					case ".off":
+						processOff(sender, channel);
+						break;
+					case ".on":
+						processOn(sender, channel);
+						break;
+					case ".reloadconfig":
+						reloadConfigFile();
+						sendMessage(channel, "Configuration file has been successfully reloaded.");
+						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " reloaded the config file");
+						break;
+					case ".reloadversions":
+						versionParser.load();
+						sendMessage(channel, "Versions file has been successfully reloaded.");
+						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " reloaded the zandronum versions");
+						break;
+					case ".sendall":
+						sendCommandAll(keywords, sender, channel);
+						break;
+					case ".debug":
+						debugMode = !debugMode;
+						sendMessage(channel, "Debug mode is now " + (debugMode ? "en" : "dis") + "abled.");
+						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " " + (debugMode ? "en" : "dis") + "abled debug mode");
+						break;
+					case ".ipintel":
+						cfg_data.ipintel_enabled = !cfg_data.ipintel_enabled;
+						sendMessage(channel, "IPIntel is now " + (cfg_data.ipintel_enabled ? "en" : "dis") + "abled.");
+						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " " + (cfg_data.ipintel_enabled ? "en" : "dis") + "abled IPIntel checking");
+						break;
+					case ".clearrecovery":
+						if (MySQL.clearRecovery()) {
+							sendMessage(channel, "Recovery cleared");
+							sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " cleared the recovery");
+						}
+						else {
+							sendMessage(channel, "Failed to clear recovery");
+						}
+						break;
+					case ".updaterecovery":
+						int added = 0;
+						List<Server> servers = getAllServers();
+						if (servers != null && servers.size() > 0)
+							for (Server server : servers)
+								if (!MySQL.serverInRecovery(server.server_id))
+									if (MySQL.addServerToRecovery(server))
+										added++;
+
+						if (added != 0) {
+							sendMessage(channel, "Added " + added + " servers to recovery");
+							sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " updated the recovery (+"+added+" servers)");
+						}
+						else {
+							sendMessage(channel, "No servers to add to recovery");
+						}
+						break;
+					default:
+						break;
+				}
+			}
+			else if (userLevel < 4) {
+				switch (keywords[0].toLowerCase()) {
+					case ".debug":
+					case ".ipintel":
+					case ".killall":
+					case ".killversion":
+					case ".notice":
+					case ".off":
+					case ".on":
+					case ".reloadconfig":
+					case ".reloadversions":
+					case ".clearrecovery":
+					case ".updaterecovery":
+					case ".sendall":
+						sendMessage(channel, "Error: You do not have permission to use that command!");
+						break;
+					default:
+						break;
+				}
+			}
 		}
+	}
+	
+	/**
+	 * Have the bot handle private message events
+	 * @param sender The IRC data of the sender
+	 * @param login The IRC data of the sender
+	 * @param hostname The IRC data of the sender
+	 * @param message The message transmitted
+	 */
+	public void onPrivateMessage(String sender, String login, String hostname, String message) {
+
+		// Check for custom hostmasks
+		if (!Functions.checkLoggedIn(hostname))
+			if (!MySQL.getUsername(hostname).equals("None"))
+				hostname = MySQL.getUsername(hostname);
+		hostname = hostname.replace(".users.zandronum.com","");
+
+		// As of now, you can only perform commands if you are logged in, so we don't need an else here
+		if (Functions.checkLoggedIn(hostname)) {
+			// Generate an array of keywords from the message (similar to onMessage)
+			String[] keywords = message.split(" ");
+			int userLevel = MySQL.getLevel(hostname);
+			switch (keywords[0].toLowerCase()) {
+				case "register":
+					if (keywords.length == 2)
+						MySQL.registerAccount(hostname, keywords[1], sender);
+					else
+						sendMessage(sender, "Incorrect syntax! Usage is: /msg " + cfg_data.irc_name + " register <password>");
+					break;
+				default:
+					break;
+			}			
+			if (userLevel >= 1) { // REGISTERED
+				switch (keywords[0].toLowerCase()) {
+					case ".commands":
+						sendMessage(sender, processPrivateCommands(userLevel));
+						break;
+					case "changepass":
+					case "changepassword":
+					case "changepw":
+						if (keywords.length == 2)
+							MySQL.changePassword(hostname, keywords[1], sender);
+						else
+							sendMessage(sender, "Incorrect syntax! Usage is: /msg " + cfg_data.irc_name + " changepw <new_password>");
+						break;
+					case ".getinfo":
+						processServerInfo(userLevel, keywords, sender, hostname);
+						break;
+					case ".send":
+						sendCommand(userLevel, keywords, hostname, sender, sender);
+						break;
+					case ".rcon":
+					case ".logfile":
+					case ".passwords":
+						sendMessage(sender, "Please use .getinfo <port> instead");
+						break;
+					default:
+						break;
+				}			
+			}
+			else if (userLevel < 1) {
+				switch (keywords[0].toLowerCase()) {
+					case ".changepass":
+					case ".changepassword":
+					case ".changepw":
+					case ".getinfo":
+					case ".send":
+					case ".rcon":
+					case ".logfile":
+					case ".passwords":
+						sendMessage(sender, "Error: You are either not logged in with NickServ or your account is not registered with " + cfg_data.service_short + " - See " + cfg_data.website_link + "/register");
+						break;
+					default:
+						break;
+				}
+			}
+			if (userLevel >= 3) { // MODERATOR
+				switch (keywords[0].toLowerCase()) {
+					case ".reauth":
+						changeNick(cfg_data.irc_name);
+						sendRawLine("NICKSERV IDENTIFY " + cfg_data.irc_pass);
+						sendLogModeratorMessage(Colors.BOLD + sender + Colors.BOLD + " reauthed me");
+						break;
+					case ".addban":
+					case ".delban":
+					case ".addhost":
+					case ".delhost":
+						sendMessage(sender, "Please use the website instead");
+						break;
+					case ".rejoin":
+						rejoinChannel();
+						sendLogModeratorMessage(Colors.BOLD + sender + Colors.BOLD + " rejoined me");
+						break;
+					default:
+						break;
+				}			
+			}
+			if (userLevel >= 4) { // ADMIN
+				switch (keywords[0].toLowerCase()) {
+					case ".banwad":
+					case ".unbanwad":
+						sendMessage(sender, "Please use the website instead");
+						break;
+					case ".addstartwad":
+						if (keywords.length > 1)
+							addExtraWad(Functions.implode(Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length), " "), sender);
+						break;
+					case ".delstartwad":
+						if (keywords.length > 1)
+							deleteExtraWad(Functions.implode(Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length), " "), sender);
+						break;
+					case ".msg":
+						messageChannel(keywords, sender);
+						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " sent message: " + Colors.BOLD + message.substring(message.indexOf(' ')+1));
+						break;
+					case ".action":
+						this.sendAction(cfg_data.irc_channel, Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
+						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " sent action: " + Colors.BOLD + message.substring(message.indexOf(' ')+1));
+						break;
+					case ".raw":
+						sendRawLine(Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
+						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " sent raw line: " + Colors.BOLD + message.substring(message.indexOf(' ')+1));
+						break;
+					case ".terminate":
+						if (System.currentTimeMillis() / 1000 > (terminateTimestamp / 1000) + 5) {
+							terminateConfirmationTimes = 0;
+							terminateTimestamp = System.currentTimeMillis();
+						}
+						if (System.currentTimeMillis() / 1000 <= (terminateTimestamp / 1000) + 5) {
+							if (terminateConfirmationTimes == 0) {
+								sendLogAdminMessage(Colors.RED + Colors.BOLD + sender + Colors.BOLD + " is attempting to terminate me!");
+								sendMessage(sender, "WARNING: This command WILL terminate the bot.");
+								sendMessage(sender, "It will to be restarted by someone who has direct");
+								sendMessage(sender, "access to the server's terminal.");
+								sendMessage(sender, " - If you're REALLY sure you want to kill the bot, type .terminate again -");
+								terminateConfirmationTimes += 1;
+							}
+							else if (terminateConfirmationTimes == 1) {
+								sendLogAdminMessage(Colors.RED + Colors.BOLD + sender + Colors.BOLD + " terminated me!");
+								sendMessage(sender, "The bot will close NOW!");
+								messageChannel(("- - The bot is closing now (terminate command issued by " + sender + ") -").split(" "), sender);
+								quitServer("Killed by " + sender);
+								System.exit(1);
+							}
+						}
+					default:
+						break;
+				}
+			}
+		}
+		else {
+			sendMessage(sender, "Error: Please make sure you are logged in with NickServ and rejoin any channels I am in. If you have a hostmask that doesn't match *.users.zandronum.com, it needs to be whitelisted by a Moderator");
+		}
+	}
+	
+	/**
+	 * This displays commands available for the user
+	 * @param userLevel The level based on AccountType enumeration
+	 */
+	private String processCommands(int userLevel) {
+		logMessage(LOGLEVEL_TRIVIAL, "Displaying processComamnds().");
+		String commands = "Public Commands: ";
+		commands += ".commands .file .get .help .liststartwads .owner .servers .uptime .whoami ";
+		if (userLevel >= 1)
+			commands += "[R] .getinfo .host .kill .killmine .load .slot .versions ";
+		if (userLevel >= 2)
+			commands += "[V] .cpu .mem .protect ";
+		if (userLevel >= 3)
+			commands += "[M] .broadcast .killinactive ";
+		if (userLevel >= 4)
+			commands += "[A] .debug .ipintel .killall .killversion .notice .off .on .reloadconfig .reloadversions .sendall .clearrecovery .updaterecovery";
+		return commands;
+	}
+	
+	private String processPrivateCommands(int userLevel) {
+		logMessage(LOGLEVEL_TRIVIAL, "Displaying processPrivateCommands().");
+		String commands = "Private Commands: ";
+		if (userLevel >= 1)
+			commands += ".changepassword .getinfo .send ";
+		if (userLevel >= 3)
+			commands += "[M] .reauth .rejoin ";
+		if (userLevel >= 4)
+			commands += "[A] .action .addstartwad .delstartwad .msg .raw .terminate";
+		return commands;
 	}
 
 	/**
 	 * Broadcasts the uptime of a specific server
 	 * @param port String - port numero
 	 */
-	public void calculateUptime(String port) {
+	public void calculateUptime(String port, String channel) {
 		if (Functions.isNumeric(port)) {
 			int portValue = Integer.valueOf(port);
 			Server s = getServer(portValue);
 			if (s != null) {
 				if (portValue >= this.min_port && portValue < this.max_port)
-					sendMessage(cfg_data.irc_channel, s.port + " has been running for " + Functions.calculateTime(System.currentTimeMillis() - s.time_started));
+					sendMessage(channel, s.port + " has been running for " + Functions.calculateTime(System.currentTimeMillis() - s.time_started));
 				else
-					sendMessage(cfg_data.irc_channel, "Port must be between " + this.min_port + " and " + this.max_port);
+					sendMessage(channel, "Port must be between " + this.min_port + " and " + this.max_port);
 			}
 			else
-				sendMessage(cfg_data.irc_channel, "There is no server running on port " + port);
+				sendMessage(channel, "There is no server running on port " + port);
 		}
 		else
-			sendMessage(cfg_data.irc_channel, "Port must be a number (ex: .uptime 15000)");
+			sendMessage(channel, "Port must be a number (ex: .uptime 15000)");
 	}
 
 	/**
@@ -683,30 +1034,17 @@ public class Bot extends PircBot {
 	 * @param keywords String[] - array of words (message)
 	 * @param userLevel int - bitmask level
 	 */
-	public void setNotice (String[] keywords, int userLevel, String sender) {
+	public void setNotice(String[] keywords, int userLevel, String channel) {
 		if (keywords.length == 1) {
-			sendMessage(cfg_data.irc_channel, "Notice is: " + cfg_data.bot_notice);
+			sendMessage(channel, "Notice is: " + cfg_data.bot_notice);
 			return;
 		}
 		if (isAccountTypeOf(userLevel, ADMIN)) {
 			cfg_data.bot_notice = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
-			sendMessage(cfg_data.irc_channel, "New notice has been set.");
-			sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " sets periodic global notice to " + Colors.BOLD + cfg_data.bot_notice + Colors.BOLD);
+			sendMessage(channel, "New notice has been set.");
 		}
 		else
-			sendMessage(cfg_data.irc_channel, "You do not have permission to set the notice.");
-	}
-
-	/**
-	 * Purges an IP address from all banlists
-	 * @param ip String - the target's IP address
-	 */
-	private void purgeBans(String ip) {
-		List<Server> tempList = new LinkedList<>(servers);
-		for (Server s : tempList) {
-			s.in.println("delban " + ip);
-		}
-		sendMessage(cfg_data.irc_channel, "Purged " + ip + " from all banlists.");
+			sendMessage(channel, "You do not have permission to set the notice.");
 	}
 
 	/**
@@ -719,32 +1057,7 @@ public class Bot extends PircBot {
 		if (isAccountTypeOf(level, REGISTERED))
 			return "You are logged in as " + Functions.getUserName(hostname);
 		else
-			return "You are not logged in or do not have an account with TSPG. See http://allfearthesentinel.net/ under Getting Started";
-	}
-
-	/**
-	 * This displays commands available for the user
-	 * @param userLevel The level based on AccountType enumeration
-	 */
-	private String processCommands(int userLevel) {
-		logMessage(LOGLEVEL_TRIVIAL, "Displaying processComamnds().");
-		if (isAccountTypeOf(userLevel, OPERATOR))
-			return ".addban .addhost .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
-			" .host .kill .killall .killmine .killinactive .liststartwads .load .mem " +
-			".notice .off .on .owner .protect .purgebans .query .rcon .reauth .reloadversions .save .send .servers .slot .terminate .unbanwad " +
-			".uptime .whoami";
-		else if (isAccountTypeOf(userLevel, ADMIN))
-			return ".addban .addhost .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help" +
-					" .host .kill .killall .killmine .killinactive .liststartwads .load .mem " +
-					".notice .off .on .owner .protect .purgebans .query .rcon .reauth .reloadversions .save .send .servers .slot .unbanwad .uptime .whoami";
-		else if (isAccountTypeOf(userLevel, MODERATOR))
-			return ".addban .addhost .addstartwad .autorestart .banwad .broadcast .commands .cpu .delban .delstartwad .file .get .help .host" +
-					" .kill .killmine .killinactive .liststartwads .load .mem " +
-					".notice .owner .protect .purgebans .query .rcon .reauth .save .send .servers .slot .unbanwad .uptime .whoami";
-		else if (isAccountTypeOf(userLevel, REGISTERED))
-			return ".commands .cpu .file .get .help .host .kill .killmine .load .mem .owner .query .rcon .save .servers .slot .uptime .whoami";
-		else
-			return "[Not logged in, guests have limited access] .commands .cpu .file .help .mem .servers .uptime .whoami";
+			return "You are not logged in or do not have an account with " + cfg_data.service_short + ". Please visit " + cfg_data.website_link + "/register for instructions on how to register";
 	}
 
 	/**
@@ -758,7 +1071,6 @@ public class Bot extends PircBot {
 		else {
 			String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
 			sendMessage(cfg_data.irc_channel, message);
-			sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " makes me say \"" + Colors.BOLD+message+Colors.BOLD + "\" in " + cfg_data.irc_channel);
 		}
 	}
 
@@ -781,27 +1093,24 @@ public class Bot extends PircBot {
 
 	/**
 	 * Gets a field requested by the user
-	 * @param userLevel The user's bitmask level
 	 * @param keywords The field the user wants
 	 */
-	private void processGet(int userLevel, String[] keywords) {
+	private void processGet(String[] keywords, String channel) {
 		logMessage(LOGLEVEL_TRIVIAL, "Displaying processGet().");
-		if (isAccountTypeOf(userLevel, REGISTERED)) {
-			if (keywords.length != 3) {
-				sendMessage(cfg_data.irc_channel, "Proper syntax: .get <port> <property>");
-				return;
-			}
-			if (!Functions.isNumeric(keywords[1])) {
-				sendMessage(cfg_data.irc_channel, "Port is not a valid number");
-				return;
-			}
-			Server tempServer = getServer(Integer.parseInt(keywords[1]));
-			if (tempServer == null) {
-				sendMessage(cfg_data.irc_channel, "There is no server running on this port.");
-				return;
-			}
-			sendMessage(cfg_data.irc_channel, tempServer.getField(keywords[2]));
+		if (keywords.length != 3) {
+			sendMessage(channel, "Proper syntax: .get <port> <property>");
+			return;
 		}
+		if (!Functions.isNumeric(keywords[1])) {
+			sendMessage(channel, "Port is not a valid number");
+			return;
+		}
+		Server tempServer = getServer(Integer.parseInt(keywords[1]));
+		if (tempServer == null) {
+			sendMessage(channel, "There is no server running on this port.");
+			return;
+		}
+		sendMessage(channel, tempServer.getField(keywords[2]));
 	}
 
 	/**
@@ -814,22 +1123,18 @@ public class Bot extends PircBot {
 	public void processHost(int userLevel, String channel, String sender, String hostname, String message, boolean autoRestart, int port) {
 		logMessage(LOGLEVEL_NORMAL, "Processing the host command for " + Functions.getUserName(hostname) + " with the message \"" + message + "\".");
 		if (botEnabled || isAccountTypeOf(userLevel, ADMIN)) {
-			if (isAccountTypeOf(userLevel, REGISTERED)) {
-				autoRestart = (message.contains("autorestart=true") || message.contains("autorestart=on"));
-				int slots = MySQL.getMaxSlots(hostname);
-				int userServers;
-				if (getUserServers(Functions.getUserName(hostname)) == null) userServers = 0;
-				else userServers = getUserServers(Functions.getUserName(hostname)).size();
-				if (slots > userServers)
-					Server.handleHostCommand(this, servers, channel, sender, hostname, message, userLevel, autoRestart, port, null);
-				else
-					sendMessage(cfg_data.irc_channel, "You have reached your server limit (" + slots + ")");
-			}
+			autoRestart = (message.contains("autorestart=true") || message.contains("autorestart=on"));
+			int slots = MySQL.getMaxSlots(hostname);
+			int userServers;
+			if (getUserServers(Functions.getUserName(hostname)) == null) userServers = 0;
+			else userServers = getUserServers(Functions.getUserName(hostname)).size();
+			if (slots > userServers)
+				Server.handleHostCommand(this, servers, channel, sender, hostname, message, userLevel, autoRestart, port, null, false);
 			else
-				sendMessage(cfg_data.irc_channel, "You must register with " + cfg_data.irc_name + " and be identified with NickServ to host! See http://allfearthesentinel.net/ under Getting Started");
+				sendMessage(channel, "You have reached your server limit (" + slots + ")");
 		}
 		else
-			sendMessage(cfg_data.irc_channel, cfg_data.irc_name + " is currently disabled from hosting for the time being. Sorry for any inconvenience!");
+			sendMessage(channel, "The bot is currently disabled from hosting for the time being. Sorry for any inconvenience!");
 	}
 
 	/**
@@ -838,23 +1143,23 @@ public class Bot extends PircBot {
 	 * @param keywords The keywords to be processed
 	 * @param hostname hostname from the sender
 	 */
-	private void processKill(int userLevel, String[] keywords, String hostname, String sender) {
+	private void processKill(int userLevel, String[] keywords, String hostname, String sender, String channel) {
 		logMessage(LOGLEVEL_NORMAL, "Processing kill.");
 		// Ensure proper syntax
 		if (keywords.length != 2) {
-			sendMessage(cfg_data.irc_channel, "Proper syntax: .kill <port>");
+			sendMessage(channel, "Proper syntax: .kill <port>");
 			return;
 		}
 
 		// Safety net
 		if (servers == null) {
-			sendMessage(cfg_data.irc_channel, "Critical error: Linkedlist is null, contact an administrator.");
+			sendMessage(channel, "Critical error: Linkedlist is null, contact an administrator.");
 			return;
 		}
 
 		// If server list is empty
 		if (servers.isEmpty()) {
-			sendMessage(cfg_data.irc_channel, "There are currently no servers running!");
+			sendMessage(channel, "There are currently no servers running!");
 			return;
 		}
 
@@ -866,243 +1171,240 @@ public class Bot extends PircBot {
 					if (Functions.getUserName(server.irc_hostname).equalsIgnoreCase(Functions.getUserName(hostname)) || isAccountTypeOf(userLevel, MODERATOR))
 						if (server.serverprocess != null) {
 							server.being_killed = true;
+							if (Functions.getUserName(server.irc_hostname).equalsIgnoreCase(Functions.getUserName(hostname)))
+							{
+								server.being_killed_by_owner = true;
+							}
 							server.auto_restart = false;
 							server.serverprocess.terminateServer();
 						}
 						else
-							sendMessage(cfg_data.irc_channel, "Error: Server process is null, contact an administrator.");
+							sendMessage(channel, "Error: Server process is null, contact an administrator.");
 					else
-						sendMessage(cfg_data.irc_channel, "Error: You do not own this server!");
+						sendMessage(channel, "Error: You do not own this server!");
 				}
 				else
-					sendMessage(cfg_data.irc_channel, "Error: There is no server running on this port.");
+					sendMessage(channel, "Error: There is no server running on this port.");
 			} else
-				sendMessage(cfg_data.irc_channel, "Improper port number.");
+				sendMessage(channel, "Improper port number.");
 		// Admins/mods can kill anything
 		} else if (isAccountTypeOf(userLevel, MODERATOR)) {
-			killServer(keywords[1], sender); // Can pass string, will process it in the method safely if something goes wrong
+			killServer(keywords[1], sender, channel); // Can pass string, will process it in the method safely if something goes wrong
 		}
 	}
 
 	/**
 	 * When requested it will kill every server in the linked list
-	 * @param userLevel The user level of the person requesting
+	 * @param hostname hostname from the sender
 	 */
-	private void processKillAll(int userLevel) {
+	private void processKillAll(String sender, String channel) {
 		logMessage(LOGLEVEL_IMPORTANT, "Processing killall.");
-		if (isAccountTypeOf(userLevel, ADMIN)) {
-			// If we use this.servers instead of a temporary list, it will remove the servers from the list while iterating over them
-			// This will throw a concurrent modification exception
-			// As a temporary solution, we can create a temporary list that will hold the values of the real list at the time it was called
-			List<Server> tempList = new LinkedList<>(servers);
-			int serverCount = servers.size();
-			if (tempList.size() > 0) {
-				for (Server s : tempList) {
-					s.hide_stop_message = true;
-					s.being_killed = true;
-					s.auto_restart = false;
-					s.killServer();
-				}
-				sendMessage(cfg_data.irc_channel, Functions.pluralize("Killed a total of " + serverCount + " server{s}.", serverCount));
-			} else
-				sendMessage(cfg_data.irc_channel, "There are no servers running.");
-		}
-		else
-			sendMessage(cfg_data.irc_channel, "You do not have permission to use this command.");
-	}
-
-	private void processKillVersion(int userlevel, String[] keywords, String sender) {
-		if (isAccountTypeOf(userlevel, ADMIN)) {
-			if (keywords.length != 2) {
-				sendMessage(cfg_data.irc_channel, "Invalid amount of arguments. Syntax: .killversion <version>");
-				return;
-			}
-
-			String version = keywords[1];
-
-			if (!vSHashmap.containsKey(version)) {
-				sendMessage(cfg_data.irc_channel, "Unknown version " + version);
-				return;
-			}
-
-			List<Server> tempList = new LinkedList<Server>(vSHashmap.get(version));
-			if (tempList.size() < 1) {
-				sendMessage(cfg_data.irc_channel, "No servers to kill.");
-				return;
-			}
-
-			int killed = 0;
+		// If we use this.servers instead of a temporary list, it will remove the servers from the list while iterating over them
+		// This will throw a concurrent modification exception
+		// As a temporary solution, we can create a temporary list that will hold the values of the real list at the time it was called
+		List<Server> tempList = new LinkedList<>(servers);
+		int serverCount = servers.size();
+		if (tempList.size() > 0) {
 			for (Server s : tempList) {
 				s.hide_stop_message = true;
 				s.being_killed = true;
 				s.auto_restart = false;
 				s.killServer();
-				killed++;
 			}
+			sendMessage(channel, Functions.pluralize("Killed a total of " + serverCount + " server{s}.", serverCount));
+			//if (channel != cfg_data.irc_channel)
+			//	sendMessage(cfg_data.irc_channel, Functions.pluralize("Killed a total of " + serverCount + " server{s}.", serverCount));
+			sendLogAdminMessage(Functions.pluralize(Colors.BOLD + sender + Colors.BOLD + " Killed a total of " + Colors.BOLD + serverCount + Colors.BOLD + " server{s}.", serverCount));
+		} else
+			sendMessage(channel, "There are no servers running.");
+	}
 
-			String plural = (killed == 1 ? "" : "s");
-			sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " kills all " + killed + Colors.BOLD + keywords[1] + Colors.BOLD + " servers");
-			sendMessage(cfg_data.irc_channel, "Killed a total of " + killed + " servers.");
+	private void processKillVersion(String[] keywords, String sender, String channel) {
+		if (keywords.length != 2) {
+			sendMessage(channel, "Invalid amount of arguments. Syntax: .killversion <version>");
+			return;
 		}
+
+		String version = keywords[1];
+
+		if (!vSHashmap.containsKey(version)) {
+			sendMessage(channel, "Unknown version " + version);
+			return;
+		}
+
+		List<Server> tempList = new LinkedList<Server>(vSHashmap.get(version));
+		if (tempList.size() < 1) {
+			sendMessage(channel, "No servers to kill.");
+			return;
+		}
+
+		int killed = 0;
+		for (Server s : tempList) {
+			s.hide_stop_message = true;
+			s.being_killed = true;
+			s.auto_restart = false;
+			s.killServer();
+			killed++;
+		}
+
+		sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " kills all " + killed + Colors.BOLD + keywords[1] + Colors.BOLD + " servers");
+		sendMessage(channel, "Killed a total of " + killed + " servers.");
+		//if (channel != cfg_data.irc_channel)
+		//	sendMessage(cfg_data.irc_channel, "Killed a total of " + killed + " servers.");
 	}
 	/**
 	 * This will look through the list and kill all the servers that the hostname owns
-	 * @param userLevel The level of the user
 	 * @param hostname The hostname of the person invoking this command
 	 */
-	private void processKillMine(int userLevel, String hostname, String sender) {
+	private void processKillMine(String hostname, String sender, String channel) {
 		logMessage(LOGLEVEL_TRIVIAL, "Processing killmine.");
-		if (isAccountTypeOf(userLevel, REGISTERED)) {
-			List<Server> servers = getUserServers(Functions.getUserName(hostname));
-			if (servers != null) {
-				ArrayList<String> ports = new ArrayList<>();
-				for (Server s : servers) {
-					s.auto_restart = false;
-					s.being_killed = true;
-					s.hide_stop_message = true;
-					s.killServer();
-					ports.add(String.valueOf(s.port));
-				}
-				if (ports.size() > 0) {
-					sendMessage(cfg_data.irc_channel, Functions.pluralize("Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") +")", ports.size()));
-					String plural = (ports.size() == 1 ? "" : "s");
-					sendLogUserMessage(Colors.BOLD + sender + Colors.BOLD + " kills their " + ports.size() + " server" + plural);
-				}
-				else {
-					sendMessage(cfg_data.irc_channel, "You do not have any servers running.");
-				}
-			} else {
-				sendMessage(cfg_data.irc_channel, "There are no servers running.");
+		List<Server> servers = getUserServers(Functions.getUserName(hostname));
+		if (servers != null) {
+			ArrayList<String> ports = new ArrayList<>();
+			for (Server s : servers) {
+				s.auto_restart = false;
+				s.being_killed = true;
+				s.hide_stop_message = true;
+				s.killServer();
+				ports.add(String.valueOf(s.port));
 			}
+			if (ports.size() > 0) {
+				sendLogUserMessage(Functions.pluralize(Colors.BOLD + sender + Colors.BOLD + " Killed their " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") +")", ports.size()));
+				sendMessage(channel, Functions.pluralize("Killed your " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") +")", ports.size()));
+				//if (channel != cfg_data.irc_channel)
+				//	sendMessage(cfg_data.irc_channel, Functions.pluralize(sender + " killed their " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") +")", ports.size()));
+			}
+			else {
+				sendMessage(channel, "You do not have any servers running.");
+			}
+		} else {
+			sendMessage(channel, "There are no servers running.");
 		}
 	}
 
 	/**
 	 * This will kill inactive servers based on the days specified in the second parameter
-	 * @param userLevel The user's bitmask level
 	 * @param keywords The field the user wants
 	 */
-	private void processKillInactive(int userLevel, String[] keywords) {
+	private void processKillInactive(String[] keywords, String sender, String channel) {
 		logMessage(LOGLEVEL_NORMAL, "Processing a kill of inactive servers.");
-		if (isAccountTypeOf(userLevel, MODERATOR)) {
-			if (keywords.length < 2) {
-				sendMessage(cfg_data.irc_channel, "Proper syntax: .killinactive <days since> (ex: use .killinactive 3 to kill servers that haven't seen anyone for 3 days)");
-				return;
-			}
-			if (Functions.isNumeric(keywords[1])) {
-				ArrayList<String> ports = new ArrayList<>();
-				int numOfDays = Integer.parseInt(keywords[1]);
-				if (numOfDays > 0) {
-					if (servers == null || servers.isEmpty()) {
-						sendMessage(cfg_data.irc_channel, "No servers to kill.");
-						return;
-					}
-					sendMessage(cfg_data.irc_channel, "Killing servers with " + numOfDays + "+ days of inactivity.");
-					// Temporary list to avoid concurrent modification exception
-					List<Server> tempList = new LinkedList<>(servers);
-					for (Server s : tempList) {
-						if (System.currentTimeMillis() - s.serverprocess.last_activity > (Server.DAY_MILLISECONDS * numOfDays))
-							if (!s.protected_server) {
-								s.hide_stop_message = true;
-								s.being_killed = true;
-								s.auto_restart = false;
-								ports.add(String.valueOf(s.port));
-								s.serverprocess.terminateServer();
-							}
-					}
-					if (ports.size() == 0) {
-						sendMessage(cfg_data.irc_channel, "No servers were killed.");
-					}
-					else {
-						sendMessage(cfg_data.irc_channel, Functions.pluralize("Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") + ")", ports.size()));
-					}
-				} else {
-					sendMessage(cfg_data.irc_channel, "Using zero or less for .killinactive is not allowed.");
+		if (keywords.length < 2) {
+			sendMessage(channel, "Proper syntax: .killinactive <days since> (ex: use .killinactive 3 to kill servers that haven't seen anyone for 3 days)");
+			return;
+		}
+		if (Functions.isNumeric(keywords[1])) {
+			ArrayList<String> ports = new ArrayList<>();
+			int numOfDays = Integer.parseInt(keywords[1]);
+			if (numOfDays > 0) {
+				if (servers == null || servers.isEmpty()) {
+					sendMessage(channel, "No servers to kill.");
+					return;
+				}
+				sendMessage(channel, "Killing servers with " + numOfDays + "+ days of inactivity.");
+				//if (channel != cfg_data.irc_channel)
+				//	sendMessage(cfg_data.irc_channel, "Killing servers with " + numOfDays + "+ days of inactivity.");
+				// Temporary list to avoid concurrent modification exception
+				List<Server> tempList = new LinkedList<>(servers);
+				for (Server s : tempList) {
+					if (System.currentTimeMillis() - s.serverprocess.last_activity > (Server.DAY_MILLISECONDS * numOfDays))
+						if (!s.protected_server) {
+							s.hide_stop_message = true;
+							s.being_killed = true;
+							s.auto_restart = false;
+							ports.add(String.valueOf(s.port));
+							s.serverprocess.terminateServer();
+						}
+				}
+				if (ports.size() == 0) {
+					sendMessage(channel, "No servers were killed.");
+				}
+				else {
+					sendLogAdminMessage(Functions.pluralize(Colors.BOLD + sender + Colors.BOLD + " Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") + ")", ports.size()));
+					sendMessage(channel, Functions.pluralize("Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") + ")", ports.size()));
+					//if (channel != cfg_data.irc_channel)
+					//	sendMessage(cfg_data.irc_channel, Functions.pluralize("Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") + ")", ports.size()));
 				}
 			} else {
-				sendMessage(cfg_data.irc_channel, "Unexpected parameter for method.");
+				sendMessage(channel, "Using zero or less for .killinactive is not allowed.");
 			}
+		} else {
+			sendMessage(channel, "Unexpected parameter for method.");
 		}
 	}
 
 	/**
 	 * Admins can turn off hosting with this
-	 * @param userLevel The user's bitmask level
 	 */
-	private void processOff(int userLevel, String sender) {
+	private void processOff(String sender, String channel) {
 		logMessage(LOGLEVEL_IMPORTANT, "An admin has disabled hosting.");
 		if (botEnabled) {
-			if (isAccountTypeOf(userLevel, ADMIN)) {
-				botEnabled = false;
-				sendMessage(cfg_data.irc_channel, "Bot disabled.");
-				sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " disables hosting");
-			}
+			botEnabled = false;
+			sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " disables hosting");
+			sendMessage(channel, "Bot disabled.");
+			//if (channel != cfg_data.irc_channel)
+			//	sendMessage(cfg_data.irc_channel, "Bot disabled.");
 		}
 	}
 
 	/**
 	 * Admins can re-enable hosting with this
-	 * @param userLevel The user's bitmask level
 	 */
-	private void processOn(int userLevel, String sender) {
+	private void processOn(String sender, String channel) {
 		logMessage(LOGLEVEL_IMPORTANT, "An admin has re-enabled hosting.");
 		if (!botEnabled) {
-			if (isAccountTypeOf(userLevel, ADMIN)) {
-				botEnabled = true;
-				sendMessage(cfg_data.irc_channel, "Bot enabled.");
-				sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " enables hosting");
-			}
+			botEnabled = true;
+			sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " enables hosting");
+			sendMessage(channel, "Bot enabled.");
+			//if (channel != cfg_data.irc_channel)
+			//	sendMessage(cfg_data.irc_channel, "Bot enabled.");
 		}
 	}
 
 	/**
 	 * This checks for who owns the server on the specified port
-	 * @param userLevel The level of the user requesting the data
 	 * @param keywords The keywords to pass
 	 */
-	private void processOwner(int userLevel, String[] keywords) {
+	private void processOwner(String[] keywords, String channel) {
 		logMessage(LOGLEVEL_DEBUG, "Processing an owner.");
 			if (keywords.length == 2) {
 				if (Functions.isNumeric(keywords[1])) {
 					Server s = getServer(Integer.parseInt(keywords[1]));
 					if (s != null)
-						sendMessage(cfg_data.irc_channel, "The owner of port " + keywords[1] + " is: " + s.sender + "[" + Functions.getUserName(s.irc_hostname) + "].");
+						sendMessage(channel, "The owner of port " + keywords[1] + " is: " + s.sender + "[" + Functions.getUserName(s.irc_hostname) + "].");
 					else
-						sendMessage(cfg_data.irc_channel, "There is no server running on " + keywords[1] + ".");
+						sendMessage(channel, "There is no server running on " + keywords[1] + ".");
 				} else
-					sendMessage(cfg_data.irc_channel, "Invalid port number.");
+					sendMessage(channel, "Invalid port number.");
 			} else
-				sendMessage(cfg_data.irc_channel, "Improper syntax, use: .owner <port>");
+				sendMessage(channel, "Improper syntax, use: .owner <port>");
 	}
 
 	/**
 	 * Will attempt to query a server and generate a line of text
-	 * @param userLevel The level of the user
 	 * @param keywords The keywords sent
 	 */
-	private void handleQuery(int userLevel, String[] keywords) {
-		if (isAccountTypeOf(userLevel, REGISTERED)) {
-			if (keywords.length == 2) {
-				String[] ipFragment = keywords[1].split(":");
-				if (ipFragment.length == 2) {
-					if (ipFragment[0].length() > 0 && ipFragment[1].length() > 0 && Functions.isNumeric(ipFragment[1])) {
-						int port = Integer.parseInt(ipFragment[1]);
-						if (port > 0 && port < 65535) {
-							sendMessageToChannel("Attempting to query " + keywords[1] + ", please wait...");
-							ServerQueryRequest request = new ServerQueryRequest(ipFragment[0], port);
-							if (!queryManager.addRequest(request))
-								sendMessageToChannel("Too many people requesting queries. Please try again later.");
-						} else
-							sendMessageToChannel("Port value is not between 0 - 65536 (ends exclusive), please fix your IP:port and try again.");
+	/*
+	private void handleQuery(String[] keywords) {
+		if (keywords.length == 2) {
+			String[] ipFragment = keywords[1].split(":");
+			if (ipFragment.length == 2) {
+				if (ipFragment[0].length() > 0 && ipFragment[1].length() > 0 && Functions.isNumeric(ipFragment[1])) {
+					int port = Integer.parseInt(ipFragment[1]);
+					if (port > 0 && port < 65535) {
+						sendMessageToChannel("Attempting to query " + keywords[1] + ", please wait...");
+						ServerQueryRequest request = new ServerQueryRequest(ipFragment[0], port);
+						if (!queryManager.addRequest(request))
+							sendMessageToChannel("Too many people requesting queries. Please try again later.");
 					} else
-						sendMessageToChannel("Missing (or too many) port delimiters, Usage: .query <ip:port>   (example: .query 98.173.12.44:20555)");
+						sendMessageToChannel("Port value is not between 0 - 65536 (ends exclusive), please fix your IP:port and try again.");
 				} else
 					sendMessageToChannel("Missing (or too many) port delimiters, Usage: .query <ip:port>   (example: .query 98.173.12.44:20555)");
 			} else
-				sendMessageToChannel("Usage: .query <ip:port>   (example: .query 98.173.12.44:20555)");
-		}
+				sendMessageToChannel("Missing (or too many) port delimiters, Usage: .query <ip:port>   (example: .query 98.173.12.44:20555)");
+		} else
+			sendMessageToChannel("Usage: .query <ip:port>   (example: .query 98.173.12.44:20555)");
 	}
-
+	*/
 	/**
 	 * Handles RCON stuff
 	 * @param userLevel int - the user's level (permissions)
@@ -1110,7 +1412,7 @@ public class Bot extends PircBot {
 	 * @param sender String - the nickname of the sender
 	 * @param hostname String - the hostname of the sender
 	 */
-	private void processRcon(int userLevel, String[] keywords, String sender, String hostname) {
+	private void processServerInfo(int userLevel, String[] keywords, String sender, String hostname) {
 		logMessage(LOGLEVEL_NORMAL, "Processing a request for rcon (from " + sender + ").");
 		if (isAccountTypeOf(userLevel, REGISTERED)) {
 			if (keywords.length == 2) {
@@ -1121,16 +1423,17 @@ public class Bot extends PircBot {
 						boolean isHoster = Functions.getUserName(s.irc_hostname).equals(Functions.getUserName(hostname));
 						if (isHoster || isAccountTypeOf(userLevel, MODERATOR)) {
 							String logSender = (isHoster ? "their own" : Colors.BOLD + s.sender + Colors.BOLD + "'s");
-							String logStr = Colors.BOLD + sender + Colors.BOLD + " requests RCON info for " + logSender + " server on port " + port;
+							String logStr = Colors.BOLD + sender + Colors.BOLD + " requests server info for " + logSender + " server on port " + port;
 							
-							sendMessage(sender, "RCON: " + s.rcon_password);
-							sendMessage(sender, "ID: " + s.server_id);
-							sendMessage(sender, "LOG: http://static.allfearthesentinel.net/logs/" + s.server_id + ".txt");
+							sendMessage(sender, "Log File: " + cfg_data.static_link + "/logs/" + s.server_id + ".txt");
+							sendMessage(sender, "RCON Password: " + s.rcon_password);
+							sendMessage(sender, "Connect Password: " + s.connect_password);
+							sendMessage(sender, "Join Password: " + s.join_password);
 							
 							if (isHoster) {
 								sendLogUserMessage(logStr);
 							} else {
-								sendLogAdminMessage(logStr);
+								sendLogModeratorMessage(logStr);
 							}
 						}
 						else
@@ -1151,207 +1454,24 @@ public class Bot extends PircBot {
 	 * Sends a message to the channel with a list of servers from the user
 	 * @param keywords String[] - the message
 	 */
-	private void processServers(String[] keywords) {
+	private void processServers(String[] keywords, String channel) {
 		logMessage(LOGLEVEL_NORMAL, "Getting a list of servers.");
 		if (keywords.length == 2) {
 			List<Server> servers = getUserServers(Functions.getUserName(keywords[1]));
 			if (servers != null && servers.size() > 0) {
 				for (Server server : servers) {
-					sendMessage(cfg_data.irc_channel,  server.port + ": " + server.servername + ((server.wads != null) ?
-					" with wads " + Functions.implode(server.wads, ", ") : ""));
+					sendMessage(channel,  server.port + ": \"" + server.servername + ((server.wads != null) ?
+					"\" with wads " + Functions.implode(server.wads, ", ") : ""));
 				}
 			}
 			else
-				sendMessage(cfg_data.irc_channel, "User " + Functions.getUserName(keywords[1]) + " has no servers running.");
+				sendMessage(channel, "User " + Functions.getUserName(keywords[1]) + " has no servers running.");
 		}
 		else if (keywords.length == 1) {
-			sendMessage(cfg_data.irc_channel, Functions.pluralize("There are " + servers.size() + " server{s}.", servers.size()));
+			sendMessage(channel, Functions.pluralize("There are " + servers.size() + " server{s}.", servers.size()));
 		}
 		else
-			sendMessage(cfg_data.irc_channel, "Incorrect syntax! Correct usage is .servers or .servers <username>");
-	}
-
-	/**
-	 * Have the bot handle private message events
-	 * @param sender The IRC data of the sender
-	 * @param login The IRC data of the sender
-	 * @param hostname The IRC data of the sender
-	 * @param message The message transmitted
-	 */
-	public void onPrivateMessage(String sender, String login, String hostname, String message) {
-
-		// Check for custom hostmasks
-		if (!Functions.checkLoggedIn(hostname))
-			if (!MySQL.getUsername(hostname).equals("None"))
-				hostname = MySQL.getUsername(hostname);
-
-		// As of now, you can only perform commands if you are logged in, so we don't need an else here
-		if (Functions.checkLoggedIn(hostname)) {
-			// Generate an array of keywords from the message (similar to onMessage)
-			String[] keywords = message.split(" ");
-			int userLevel = MySQL.getLevel(hostname);
-			switch (keywords[0].toLowerCase()) {
-				case ".addban":
-					if (isAccountTypeOf(userLevel, MODERATOR) && keywords.length > 1) {
-						MySQL.addBan(message.split(" ")[1], Functions.implode(Arrays.copyOfRange(message.split(" "), 2, message.split(" ").length), " "), sender);
-					}
-					break;
-				case ".addstartwad":
-					if (isAccountTypeOf(userLevel, MODERATOR) && keywords.length > 1)
-						addExtraWad(Functions.implode(Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length), " "), sender);
-					break;
-				case ".delstartwad":
-					if (isAccountTypeOf(userLevel, MODERATOR) && keywords.length > 1)
-						deleteExtraWad(Functions.implode(Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length), " "), sender);
-					break;
-				case ".rcon":
-					processRcon(userLevel, keywords, sender, hostname);
-					break;
-				case "changepass":
-				case "changepassword":
-				case "changepw":
-					if (keywords.length == 2)
-						MySQL.changePassword(hostname, keywords[1], sender);
-					else
-						sendMessage(sender, "Incorrect syntax! Usage is: /msg " + cfg_data.irc_name + " changepw <new_password>");
-					break;
-				case ".banwad":
-					if (isAccountTypeOf(userLevel, MODERATOR)) {
-						MySQL.addWadToBlacklist(Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "), sender);
-					}
-					break;
-				case ".unbanwad":
-					if (isAccountTypeOf(userLevel, MODERATOR)) {
-						MySQL.removeWadFromBlacklist(Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "), sender);
-					}
-					break;
-				case ".delban":
-					if (isAccountTypeOf(userLevel, MODERATOR) && keywords.length > 1)
-						MySQL.delBan(message.split(" ")[1], sender);
-					break;
-				case ".msg":
-					if (isAccountTypeOf(userLevel, MODERATOR))
-						messageChannel(keywords, sender);
-					break;
-				case ".action":
-				case ".act":
-					if (isAccountTypeOf(userLevel, MODERATOR)) {
-						String action = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
-						this.sendAction(cfg_data.irc_channel, action);
-						sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " forces me to act out \"" + this.getNick() + " " + Colors.BOLD+action+Colors.BOLD + "\"");
-					}
-					break;
-				case ".purgebans":
-					if (isAccountTypeOf(userLevel, MODERATOR))
-						purgeBans(keywords[1]);
-					break;
-				case ".raw":
-					if (isAccountTypeOf(userLevel, ADMIN)) {
-						String line = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
-						sendRawLine(line);
-						sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " sends raw line " + Colors.BOLD+line);
-					}
-				case ".rejoin":
-					if (isAccountTypeOf(userLevel, ADMIN))
-						rejoinChannel();
-					break;
-				case "register":
-					if (keywords.length == 2)
-						MySQL.registerAccount(hostname, keywords[1], sender);
-					else
-						sendMessage(sender, "Incorrect syntax! Usage is: /msg " + cfg_data.irc_name + " register <password>");
-					break;
-				case ".send":
-					if (isAccountTypeOf(userLevel, MODERATOR))
-						sendCommand(userLevel, keywords, hostname, sender, sender);
-					break;
-				/*
-				// Commented out as it's apparently a security risk,
-				// even though only people with ssh access should have access to it anyway.
-				// That's what OPERATOR's for...
-				case ".shell":
-					if (isAccountTypeOf(userLevel, OPERATOR)) {
-						if (keywords.length == 1) {
-							sendMessage(sender, "Usage: .shell <command>");
-							sendMessage(sender, "This command can cause delays with the bot if you use a command that takes a while to execute.");
-							sendMessage(sender, "Please, use this command wisely.");
-						} else {
-							StringBuffer stringBuffer = new StringBuffer();
-							Process process;
-							Boolean gotException = false;
-
-							try {
-								process = Runtime.getRuntime().exec(Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
-								process.waitFor();
-
-							    BufferedReader reader =
-							         new BufferedReader(new InputStreamReader(process.getInputStream()));
-
-							    String line = "";
-							    while ((line = reader.readLine())!= null)
-							    	stringBuffer.append(line + "\n");
-							} catch (Exception e) {
-								gotException = true;
-								e.printStackTrace();
-								sendMessage(sender, "An exception occured while executing the command.");
-							}
-
-							if (!gotException) {
-								String[] lines = stringBuffer.toString().split("\n");
-
-								sendMessage(sender, "Output is " + lines.length + " lines long.");
-
-								for (int n = 0; n < lines.length; n++) {
-									String s = lines[n];
-									s.replace("\n", "");
-									sendMessage(sender, n + ": " + s);
-								}
-							}
-						}
-					} else
-						sendMessage(sender, "You are not permitted to use this command.");
-
-					break;
-				*/
-				case ".terminate":
-					if (isAccountTypeOf(userLevel, OPERATOR)) {
-						sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " is trying to " +Colors.RED+Colors.BOLD+"terminate"+Colors.NORMAL+" me!!");
-						if (System.currentTimeMillis() / 1000 > (terminateTimestamp / 1000) + 5) {
-							terminateConfirmationTimes = 0;
-							terminateTimestamp = System.currentTimeMillis();
-						}
-
-						if (System.currentTimeMillis() / 1000 <= (terminateTimestamp / 1000) + 5) {
-							if (terminateConfirmationTimes == 0) {
-								sendMessage(sender, "WARNING: This command WILL terminate the bot.");
-								sendMessage(sender, "It will to be restarted by someone who has direct");
-								sendMessage(sender, "access to the server's terminal.");
-								sendMessage(sender, " - If you're REALLY sure you want to kill the bot, type .terminate again -");
-								terminateConfirmationTimes += 1;
-							}
-
-							else if (terminateConfirmationTimes == 1) {
-								if (MySQL.clearRecovery()) {
-									sendMessage(sender, "The bot will close NOW!");
-									messageChannel(("- - The bot is closing now (terminate command issued by " + sender + ") -").split(" "), sender);
-									quitServer("Killed by " + sender);
-									System.exit(1);
-								} else {
-									sendMessage(sender, "Failed to clear server recovery table.");
-								}
-							}
-						}
-
-					} else
-						sendMessage(sender, "You are not permitted to use this command.");
-
-					break;
-				default:
-					break;
-			}
-		} else {
-			sendMessage(sender, "You are not identified with NickServ. Please identify with NickServ and try again. If you have a custom hostmask, it may need to be whitelisted before you can register.");
-		}
+			sendMessage(channel, "Incorrect syntax! Correct usage is .servers or .servers <username>");
 	}
 
 	/**
@@ -1400,19 +1520,27 @@ public class Bot extends PircBot {
 	}
     
     public void sendLogInfoMessage(String message) {
-    	sendLogMessage(Colors.GREEN + "[" + Colors.BOLD + "II" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    	sendLogMessage(Colors.GREEN + "[" + Colors.BOLD + "I" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
     }
     
     public void sendLogErrorMessage(String message) {
-    	sendLogMessage(Colors.RED + "[" + Colors.BOLD + "!!" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    	sendLogMessage(Colors.RED + "[" + Colors.BOLD + "!" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
     }
     
     public void sendLogAdminMessage(String message) {
-    	sendLogMessage(Colors.YELLOW + "[" + Colors.BOLD + "AD" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    	sendLogMessage(Colors.YELLOW + "[" + Colors.BOLD + "A" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    }
+    
+    public void sendLogModeratorMessage(String message) {
+    	sendLogMessage(Colors.PURPLE + "[" + Colors.BOLD + "M" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
     }
     
     public void sendLogUserMessage(String message) {
-    	sendLogMessage(Colors.CYAN + "[" + Colors.BOLD + "UU" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    	sendLogMessage(Colors.CYAN + "[" + Colors.BOLD + "U" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    }
+    
+    public void sendLogServerMessage(String message) {
+    	sendLogMessage(Colors.BLUE + "[" + Colors.BOLD + "S" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
     }
 
 	/**

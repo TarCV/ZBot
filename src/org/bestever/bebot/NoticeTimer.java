@@ -39,7 +39,8 @@ public class NoticeTimer extends TimerTask {
 	 * Send a message to all servers
 	 */
 	public void run() {
-		for (Server s : bot.servers)
-			s.in.println("say " + bot.cfg_data.bot_notice);
+		for (Server s : bot.servers) {
+			s.in.println("playerinfo;say " + bot.cfg_data.bot_notice + ";");
+		}
 	}
 }

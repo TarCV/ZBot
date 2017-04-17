@@ -1,4 +1,44 @@
 [
-	{ "name": "2.0", "path": "/home/zandronum/zandronum-bin/2.1.2", default: true, "description": "Zandronum 2.0" },
-	{ "name": "3.0", "path": "/home/zandronum/zandronum-beta/3-0-r160229-1221", default:false, "description": "Zandronum 3.0, for testing" },
+	{
+		"name": "3.0-tspg",
+		"path": "/home/zandronum/zandronum-beta/3.0-r170416-0710-tspg/zandronum-server",
+		"default": true,
+		"description": "Zandronum 3.0-r170416-0710 dev build (TSPG fork)",
+		"data": "skulltag_content-3.0-beta01.pk3"
+	},
+	{
+		"name": "3.0-tspg-dbg",
+		"path": "/home/zandronum/zandronum-beta/3.0-r170416-0710-tspg-dbg/zandronum-server",
+		"default": false,
+		"description": "Zandronum 3.0-r170416-0710 dev build (TSPG fork, compiled with debugging information)",
+		"data": "skulltag_content-3.0-beta01.pk3"
+	},
+	{
+		"name": "3.0-r170205-2117",
+		"path": "/home/zandronum/zandronum-beta/3.0-r170205-2117/zandronum-server",
+		"default": false,
+		"description": "Zandronum 3.0-r170205-2117 dev build",
+		"data": "skulltag_content-3.0-beta01.pk3"
+	},
+	{
+		"name": "3.0-r161030-2038",
+		"path": "/home/zandronum/zandronum-beta/3.0-r161030-2038/zandronum-server",
+		"default": false,
+		"description": "Zandronum 3.0-r161030-2038 dev build",
+		"data": "skulltag_content-3.0-beta01.pk3"
+	},
+	{
+		"name": "3.0-r160814-2010",
+		"path": "/home/zandronum/zandronum-beta/3.0-r160814-2010/zandronum-server",
+		"default": false,
+		"description": "Zandronum 3.0-r160814-2010 dev build",
+		"data": "skulltag_content-3.0-beta01.pk3"
+	},
+	{
+		"name": "3.0-r160519-2047",
+		"path": "/home/zandronum/zandronum-beta/3.0-r160519-2047/zandronum-server",
+		"default": false,
+		"description": "Zandronum 3.0-r160519-2047 dev build",
+		"data": "skulltag_content-3.0-beta01.pk3"
+	}
 ]

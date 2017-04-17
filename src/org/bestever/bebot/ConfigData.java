@@ -118,6 +118,11 @@ public class ConfigData {
 	public String bot_logfile;
 
 	/**
+	 * The versions.json path
+	 */
+	public String bot_versionsfile;
+
+	/**
 	 * Contains a path to the root directory for the bot (ex: /home/zandronum/)
 	 */
 	public String bot_directory_path;
@@ -226,9 +231,25 @@ public class ConfigData {
 	/**
 	 * Maximum times to restart server
 	 */
-	public int max_restarts = 5;
+	public int max_restarts;
+	
+	/**
+	 * Maximum default servers from register
+	 */
+	public int defaultlimit = 1;
+	
+	public String service_name;
+	public String service_short;
+	public String node_name;
+	public String website_link;
+	public String static_link;
+	public String forum_link;
 
     public String log_channel = null;
+	
+	public boolean ipintel_enabled = false;
+	public String ipintel_contact = "user@example.com";
+	public double ipintel_minimum = 1.0;
 
 	/**
 	 * This constructor once initialized will parse the config file based on the path
@@ -299,6 +320,7 @@ public class ConfigData {
 		Ini.Section bot = ini.get("bot");
 		this.bot_accountfile = bot.get("accountfile");
 		this.bot_logfile = bot.get("logfile");
+		this.bot_versionsfile = bot.get("versionsfile");
 		this.bot_max_port = Integer.parseInt(bot.get("max_port"));
 		this.bot_min_port = Integer.parseInt(bot.get("min_port"));
 		this.bot_verbose = Boolean.parseBoolean(bot.get("verbose"));
@@ -321,11 +343,28 @@ public class ConfigData {
 		if(bot.get("maxrestarts") != null) {
 			this.max_restarts = Integer.parseInt(bot.get("maxrestarts"));
 		}
+		if(bot.get("defaultlimit") != null) {
+			this.defaultlimit = Integer.parseInt(bot.get("defaultlimit"));
+		}
 		if (bot.get("notice") != null)
 			this.bot_notice = bot.get("notice");
 		if (bot.get("notice_interval") != null)
 			this.bot_notice_interval = Integer.parseInt(bot.get("notice_interval"));
 		if (bot.get("extra_wads") != null)
 			this.bot_extra_wads = new ArrayList<>(getExtraWads(bot.get("extra_wads")));
+			
+
+		this.service_name = bot.get("servicename");
+		this.service_short = bot.get("shortname");
+		this.node_name = bot.get("nodename");
+		this.website_link = bot.get("websitelink").replaceAll("/$","");
+		this.static_link = bot.get("staticlink").replaceAll("/$","");
+		this.forum_link = bot.get("forumlink").replaceAll("/$","");
+		
+		
+		Ini.Section ipintel = ini.get("ipintel");
+		this.ipintel_enabled = Boolean.parseBoolean(ipintel.get("enabled"));
+		this.ipintel_contact = ipintel.get("email");
+		this.ipintel_minimum = Double.parseDouble(ipintel.get("minimum"));
 	}
 }

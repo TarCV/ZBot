@@ -19,6 +19,8 @@ import java.net.UnknownHostException;
 import java.security.NoSuchAlgorithmException;
 import java.sql.*;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.jibble.pircbot.Colors;
 
@@ -164,74 +166,6 @@ public class MySQL {
 	}
 
 	/**
-	 * Removes a wad from the wad blacklist
-	 * @param filename String - name of the file
-	 * @param sender String - name of the sender
-	 */
-	public static void removeWadFromBlacklist(String filename, String sender) {
-		String query = "DELETE FROM `" + mysql_db + "`.`blacklist` WHERE `name` = ?";
-		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
-			pst.setString(1, filename);
-			if (pst.executeUpdate() <= 0)
-				bot.sendMessage(sender, "Wad '" + filename + "' is not in the blacklist.");
-			else {
-				bot.sendMessage(sender, "Removed '" + filename + "' from the blacklist.");
-				bot.sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " removed WAD " + Colors.BOLD+filename+Colors.BOLD + " from the blacklist");
-			}
-		} catch (SQLException e) {
-			e.printStackTrace();
-			logMessage(LOGLEVEL_IMPORTANT, "Could not delete file from the blacklist. (SQL Error)");
-		}
-	}
-
-	/**
-	 * Adds a wad (filename and md5 hash) to the wad blacklist
-	 * @param filename String - name of the file to add
-	 * @param sender String - name of the sender
-	 */
-	public static void addWadToBlacklist(String filename, String sender) {
-		String query = "SELECT `md5`,`name` FROM `" + mysql_db + "`.`blacklist` WHERE `name` = ?";
-		try {
-			Connection con = getConnection();
-			PreparedStatement pst = con.prepareStatement(query);
-			pst.setString(1, filename);
-			ResultSet r = pst.executeQuery();
-			if (r.next()) {
-				bot.sendMessage(sender, "Wad '" + filename + "' already exists in blacklist.");
-			}
-			else {
-				query = "SELECT `md5`,`wadname` FROM `" + mysql_db + "`.`wads` WHERE `wadname` = ?";
-				pst = con.prepareStatement(query);
-				pst.setString(1, filename);
-				r = pst.executeQuery();
-				String name = "", md5 = "";
-				if (r.next()) {
-					name = r.getString("wadname");
-					md5 = r.getString("md5");
-				}
-				else {
-					bot.sendMessage(sender, "Wad '" + filename + "' was not found in our repository.");
-					return;
-				}
-				query = "INSERT INTO `" + mysql_db + "`.`blacklist` (`name`,`md5`) VALUES (?, ?)";
-				pst = con.prepareStatement(query);
-				pst.setString(1, name);
-				pst.setString(2, md5);
-				int result = pst.executeUpdate();
-				if (result == 1) {
-					bot.sendMessage(sender, "Added '" + name + "' to the blacklist with hash " + md5);
-					bot.sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " adds WAD " + Colors.BOLD+filename+Colors.BOLD + " to the blacklist");
-				}
-				else
-					bot.sendMessage(sender, "There was an error adding the wad to the blacklist. Please contact an administrator.");
-			}
-		} catch (SQLException e) {
-			e.printStackTrace();
-			logMessage(LOGLEVEL_IMPORTANT, "Could not blacklist wad (SQL Error)");
-		}
-	}
-
-	/**
 	 * Checks any number of wads against the wad blacklist
 	 * @param fileName String... - name of the file(s)
 	 * @return true if is blacklisted, false if not
@@ -254,13 +188,13 @@ public class MySQL {
 			}
 			ResultSet checkHashes = pst.executeQuery();
 			Statement stm = con.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
-			ResultSet blacklistedHashes = stm.executeQuery("SELECT `name`,`md5` FROM `" + mysql_db + "`.`blacklist`;");
+			ResultSet blacklistedHashes = stm.executeQuery("SELECT `name`,`reason`,`md5` FROM `" + mysql_db + "`.`blacklist`;");
 			while (checkHashes.next()) {
 				blacklistedHashes.beforeFirst();
 				while (blacklistedHashes.next())
 					if (blacklistedHashes.getString("md5").equalsIgnoreCase(checkHashes.getString("md5"))) {
 						bot.sendMessage(bot.cfg_data.irc_channel, "Wad " + checkHashes.getString("wadname") +
-								" matches blacklist " + blacklistedHashes.getString("name") + " (hash: " + blacklistedHashes.getString("md5") + ")");
+								" matches blacklist " + blacklistedHashes.getString("name") + " with reason: \"" + blacklistedHashes.getString("reason") + "\" (hash: " + blacklistedHashes.getString("md5") + ")");
 						return false;
 					}
 			}
@@ -278,17 +212,21 @@ public class MySQL {
 	 * @param ip String - IP address
 	 * @return String - the ban reason
 	 */
-	public static String getBanReason(String ip) {
-		String query = "SELECT `reason` FROM `" + mysql_db + "`.`banlist` WHERE `ip` = ?";
+	public static String getBannedReason(String ip) throws UnknownHostException {
+		String query = "SELECT * FROM `" + mysql_db + "`.`banlist` WHERE `ip` = ?";
 		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
 			pst.setString(1, ip);
 			ResultSet r = pst.executeQuery();
-			return r.getString("reason");
+			if (r.next()) {
+				if (r.getString("reason") != null) {
+					return r.getString("reason");
+				}
+			}
 		}  catch (SQLException e) {
 			e.printStackTrace();
 			logMessage(LOGLEVEL_IMPORTANT, "Could not get ban reason.");
-			return "null reason";
 		}
+		return "None Specified";
 	}
 
 	/**
@@ -297,131 +235,67 @@ public class MySQL {
 	 * @return true/false
 	 */
 	public static String checkBanned(String ip) throws UnknownHostException {
-		String query = "SELECT * FROM `" + mysql_db +"`.`banlist`";
+		String query = "SELECT * FROM `" + mysql_db + "`.`banlist` WHERE (`expire` > ? OR `expire` = 0)";
+		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
+			pst.setLong(1, new java.util.Date().getTime());
+			ResultSet r = pst.executeQuery();
+			while (r.next()) {
+				String decIP = r.getString("ip");
+				if (decIP.contains("*")) {
+					if (Functions.inRange(ip, decIP)) {
+						if (!checkWhitelisted(ip)) {
+							return decIP;
+						}
+					}
+				}
+				else if (decIP.equals(ip)) {
+					if (!checkWhitelisted(ip)) {
+						return decIP;
+					}
+				}
+			}
+		}  catch (SQLException e) {
+			e.printStackTrace();
+			logMessage(LOGLEVEL_IMPORTANT, "Could not check banlist");
+		}
+		return null;
+	}
+	
+	public static boolean checkWhitelisted(String ip) throws UnknownHostException {
+		String query = "SELECT * FROM `" + mysql_db + "`.`whitelist`";
 		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
 			ResultSet r = pst.executeQuery();
 			while (r.next()) {
 				String decIP = r.getString("ip");
 				if (decIP.contains("*")) {
-					if (Functions.inRange(ip, decIP))
-						return decIP;
+					if (Functions.inRange(ip, decIP)) {
+						return true;
+					}
 				}
-				else if (decIP.equals(ip))
-					return decIP;
+				else if (decIP.equals(ip)) {
+					return true;
+				}
 			}
-			return null;
 		}  catch (SQLException e) {
 			e.printStackTrace();
-			logMessage(LOGLEVEL_IMPORTANT, "Could not check ban.");
-			return null;
+			logMessage(LOGLEVEL_IMPORTANT, "Could not check whitelist");
 		}
+		return false;
 	}
 	
-	/**
-	 * Adds a host to the whitelisted hostmasks list
-	 * @param host String - the hostmask
-	 * @param user String - the owner of the hostmask
-	 */
-	public static void addHost(String host, String user, String sender) {
-		String query = "INSERT INTO `" + mysql_db + "`.`hostmasks` VALUES (NULL, ?, ?) ON DUPLICATE KEY UPDATE `username` = ?";
-		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
-			pst.setString(1, host);
-			pst.setString(2, user);
-			pst.setString(3, user);
-			if (pst.executeUpdate() == 1) {
-				bot.sendMessage(sender, "Added " + host + " to whitelisted hostmasks.");
-				bot.sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " whitelists hostmasks " + Colors.BOLD+host+Colors.BOLD + " with owner " + Colors.BOLD+user);
-			}
-			else
-				bot.sendMessage(sender, "That Hostmask address is already whitelisted!");
-		} catch (SQLException e) {
-			e.printStackTrace();
-			logMessage(LOGLEVEL_IMPORTANT, "Could not whitelist Hostmask");
-		}
-	}
-
-	/**
-	 * Adds a ban to the banlist
-	 * @param ip String - ip of the person to ban
-	 * @param reason String - the reason to show they are banned for
-	 */
-	public static void addBan(String ip, String reason, String sender) {
-		String date = String.valueOf(System.currentTimeMillis() / 1000L);
-		String query = "INSERT INTO `" + mysql_db + "`.`banlist` VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE `reason` = ?, `banner` = ?, `date` = ?";
+	public static boolean checkKnownIP(String ip) throws UnknownHostException {
+		String query = "SELECT * FROM `" + mysql_db + "`.`checked_ips` WHERE `ip` = ?";
 		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
 			pst.setString(1, ip);
-			pst.setString(2, reason);
-			pst.setString(3, sender);
-			pst.setString(4, date);
-			pst.setString(5, reason);
-			pst.setString(6, sender);
-			pst.setString(7, date);
-			if (pst.executeUpdate() == 1) {
-				bot.sendMessage(sender, "Added " + ip + " to banlist.");
-				bot.sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " adds IP " + Colors.BOLD+ip+Colors.BOLD + " to banlist with reason " + Colors.BOLD+reason);
-				/*
-				List<Server> tempList = new LinkedList<>(bot.servers);
-				String useQuote = (reason.startsWith("\"") ? "" : "\"");
-				for (Server server : tempList) {
-					server.in.println("addban " + ip + " perm " + useQuote + reason );
-				}
-				*/
+			ResultSet r = pst.executeQuery();
+			if (r.next()) {
+				return true;
 			}
-			else
-				bot.sendMessage(sender, "That IP address is already banned!");
-		} catch (SQLException e) {
+		}  catch (SQLException e) {
 			e.printStackTrace();
-			logMessage(LOGLEVEL_IMPORTANT, "Could not add ban to banlist");
+			logMessage(LOGLEVEL_IMPORTANT, "Could not check known IP list");
 		}
-	}
-
-	/**
-	 * Deletes an IP address from the banlist
-	 * @param ip String - the IP address to remove
-	 */
-	public static void delBan(String ip, String sender) {
-		String query = "DELETE FROM `" + mysql_db + "`.`banlist` WHERE `ip` = ?";
-		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
-			pst.setString(1, ip);
-			if (pst.executeUpdate() <= 0)
-				bot.sendMessage(sender, "IP does not exist.");
-			else {
-				// Temporary list to avoid concurrent modification exception
-				List<Server> tempList = new LinkedList<>(bot.servers);
-				for (Server server : tempList) {
-					server.in.println("delban " + ip);
-				}
-				bot.sendMessage(sender, "Removed " + ip + " from banlist.");
-				bot.sendLogAdminMessage(Colors.BOLD+sender+Colors.BOLD + " removes IP " + Colors.BOLD+ip+Colors.BOLD + " from banlist");
-			}
-		} catch (SQLException e) {
-			e.printStackTrace();
-			logMessage(LOGLEVEL_IMPORTANT, "Could not delete ip from banlist");
-		}
-	}
-	
-	public static ArrayList<String> getBanCommands() {
-		String query = "SELECT * FROM `" + mysql_db + "`.`banlist`";
-		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
-			ResultSet set = pst.executeQuery();
-			ArrayList<String> result = new ArrayList<String>();
-			
-			while (set.next()) {
-				String ip = set.getString(1);
-				String reason = set.getString(2);
-				String useQuote = (reason.startsWith("\"") ? "" : "\"");
-				
-				String command = "addban " + ip + " perm " + useQuote + reason;
-				result.add(command);
-			}
-			
-			return result;
-		} catch (SQLException e) {
-			e.printStackTrace();
-			logMessage(LOGLEVEL_IMPORTANT, "Could not delete ip from banlist");
-		}
-		
-		return null;
+		return false;
 	}
 
 	/**
@@ -461,7 +335,7 @@ public class MySQL {
 				if (r.next())
 					return r.getInt("level");
 				else
-					return 0;
+					return -1;
 			} catch (SQLException e) {
 				logMessage(LOGLEVEL_IMPORTANT, "SQL_ERROR in 'getLevel()'");
 				e.printStackTrace();
@@ -480,15 +354,12 @@ public class MySQL {
 		logMessage(LOGLEVEL_NORMAL, "Handling account registration from " + sender + ".");
 		// Query to check if the username already exists
 		String checkQuery = "SELECT `username` FROM " + mysql_db + ".`login` WHERE `username` = ?";
-
 		// Query to add entry to database
-		String executeQuery = "INSERT INTO " + mysql_db + ".`login` ( `username`, `password`, `level`, `activated`, `server_limit`, `remember_token` ) VALUES ( ?, ?, 1, 1, 4, null )";
-		try
-		(Connection con = getConnection(); PreparedStatement cs = con.prepareStatement(checkQuery); PreparedStatement xs = con.prepareStatement(executeQuery)){
+		String executeQuery = "INSERT INTO " + mysql_db + ".`login` ( `username`, `password`, `level`, `activated`, `server_limit`, `remember_token` ) VALUES ( ?, ?, 1, 1, ?, null )";
+		try (Connection con = getConnection(); PreparedStatement cs = con.prepareStatement(checkQuery); PreparedStatement xs = con.prepareStatement(executeQuery)) {
 			// Query and check if see if the username exists
 			cs.setString(1, Functions.getUserName(hostname));
 			ResultSet r = cs.executeQuery();
-
 			// The username already exists!
 			if (r.next())
 				bot.sendMessage(sender, "Account already exists!");
@@ -497,15 +368,21 @@ public class MySQL {
 				xs.setString(1, Functions.getUserName(hostname));
 				// Hash the PW with BCrypt
 				xs.setString(2, BCrypt.hashpw(password, BCrypt.gensalt(14)));
-				if (xs.executeUpdate() == 1)
+				// Set default server limit
+				xs.setInt(3, bot.cfg_data.defaultlimit);
+				if (xs.executeUpdate() >= 1) {
 					bot.sendMessage(sender, "Account created! Your username is " + Functions.getUserName(hostname) + " and your password is " + password);
-				else
-					bot.sendMessage(sender, "There was an error registering your account.");
+					bot.sendLogUserMessage(Colors.BOLD + sender + Colors.BOLD + " just registered with username " + Functions.getUserName(hostname) + "!");
 				}
-			} catch (SQLException e) {
-				logMessage(LOGLEVEL_IMPORTANT, "ERROR: SQL_ERROR in 'registerAccount()'");
-				e.printStackTrace();
-				bot.sendMessage(sender, "There was an error registering your account.");
+				else {
+					bot.sendMessage(sender, "There was an error registering your account.");
+					bot.sendLogErrorMessage(Colors.BOLD + sender + Colors.BOLD + " tried to register but there was a SQL error!");
+				}
+			}
+		} catch (SQLException e) {
+			logMessage(LOGLEVEL_IMPORTANT, "ERROR: SQL_ERROR in 'registerAccount()'");
+			e.printStackTrace();
+			bot.sendMessage(sender, "There was an error registering your account.");
 		}
 	}
 
@@ -522,8 +399,7 @@ public class MySQL {
 
 		// Query to update password
 		String executeQuery = "UPDATE " + mysql_db + ".`login` SET `password` = ? WHERE `username` = ?";
-		try
-		(Connection con = getConnection(); PreparedStatement cs = con.prepareStatement(checkQuery); PreparedStatement xs = con.prepareStatement(executeQuery)) {
+		try (Connection con = getConnection(); PreparedStatement cs = con.prepareStatement(checkQuery); PreparedStatement xs = con.prepareStatement(executeQuery)) {
 			// Query and check if see if the username exists
 			cs.setString(1, Functions.getUserName(hostname));
 			ResultSet r = cs.executeQuery();
@@ -536,7 +412,7 @@ public class MySQL {
 				// Prepare, bind & execute
 				xs.setString(1, BCrypt.hashpw(password, BCrypt.gensalt(14)));
 				xs.setString(2, r.getString("username"));
-				if (xs.executeUpdate() == 1)
+				if (xs.executeUpdate() >= 1)
 					bot.sendMessage(sender, "Successfully changed your password!");
 				else
 					bot.sendMessage(sender, "There was an error changing your password (executeUpdate error). Try again or contact an administrator with this message.");
@@ -547,51 +423,6 @@ public class MySQL {
 			e.printStackTrace();
 			bot.sendMessage(sender, "There was an error changing your password account (thrown SQLException). Try again or contact an administrator with this message.");
 		}
-	}
-
-	/**
-	 * Saves a server host command to a row
-	 * @param hostname String - the user's hostname (for verification)
-	 * @param words String Array - array of words
-	 */
-	public static void saveSlot(String hostname, String[] words) {
-		if (words.length > 2) {
-			String hostmessage = Functions.implode(Arrays.copyOfRange(words, 2, words.length), " ");
-			if ((words.length > 2) && (Functions.isNumeric(words[1]))) {
-				int slot = Integer.parseInt(words[1]);
-				if (slot > 0 && slot < 11) {
-					try (Connection con = getConnection()) {
-							String query = "SELECT `slot` FROM " + mysql_db + ".`save` WHERE `slot` = ? && `username` = ?";
-							PreparedStatement pst = con.prepareStatement(query);
-							pst.setInt(1, slot);
-							pst.setString(2, Functions.getUserName(hostname));
-							ResultSet rs = pst.executeQuery();
-							boolean empty = true;
-							while (rs.next())
-								empty = false;
-							if (empty)
-								query = "INSERT INTO " + mysql_db + ".`save` (`serverstring`, `slot`, `username`) VALUES (?, ?, ?)";
-							else
-								query = "UPDATE " + mysql_db + ".`save` SET `serverstring` = ? WHERE `slot` = ? && `username` = ?";
-							pst = con.prepareStatement(query);
-							pst.setString(1, hostmessage);
-							pst.setInt(2, slot);
-							pst.setString(3, Functions.getUserName(hostname));
-							pst.executeUpdate();
-							rs.close();
-							bot.sendMessage(bot.cfg_data.irc_channel, "Successfully updated save list.");
-						}
-					catch (SQLException e) {
-						logMessage(LOGLEVEL_IMPORTANT, "SQL Error in 'saveSlot()'");
-						e.printStackTrace();
-					}
-				}
-				else
-					bot.sendMessage(bot.cfg_data.irc_channel, "You may only specify slot 1 to 10.");
-			}
-		}
-		else
-			bot.sendMessage(bot.cfg_data.irc_channel, "Incorrect syntax! Correct usage is .save 1-10 <host_message>");
 	}
 
 	/**
@@ -607,7 +438,7 @@ public class MySQL {
 			if (Functions.isNumeric(words[1])) {
 				int slot = Integer.parseInt(words[1]);
 				if (slot > 10 || slot < 1) {
-					bot.sendMessage(bot.cfg_data.irc_channel, "Slot must be between 1 and 10.");
+					bot.sendMessage(channel, "Slot must be between 1 and 10.");
 					return;
 				}
 				try (Connection con = getConnection()) {
@@ -621,7 +452,7 @@ public class MySQL {
 						bot.processHost(level, channel, sender, hostname, hostCommand, false, bot.getMinPort());
 					}
 					else
-						 bot.sendMessage(bot.cfg_data.irc_channel, "You do not have anything saved to that slot!");
+						 bot.sendMessage(channel, "You do not have anything saved to that slot!");
 				}
 				catch (SQLException e) {
 					Logger.logMessage(LOGLEVEL_IMPORTANT, "SQL Error in 'loadSlot()'");
@@ -630,7 +461,7 @@ public class MySQL {
 			}
 		}
 		else
-			bot.sendMessage(bot.cfg_data.irc_channel, "Incorrect syntax! Correct syntax is .load 1 to 10");
+			bot.sendMessage(channel, "Incorrect syntax! Correct syntax is .load 1 to 10");
 	}
 
 	/**
@@ -659,20 +490,20 @@ public class MySQL {
 	 * @param hostname String - the user's hostname
 	 * @param words String[] - array of words of message
 	 */
-	public static void showSlot(String hostname, String[] words) {
+	public static void showSlot(String hostname, String[] words, String channel) {
 		if (words.length == 2) {
 			if (Functions.isNumeric(words[1])) {
 				int slot = Integer.parseInt(words[1]);
 				if (slot > 0 && slot < 11) {
-					String query = "SELECT `serverstring`,`slot` FROM `" + mysql_db +"`.`save` WHERE `slot` = ? && `username` = ?";
+					String query = "SELECT `serverstring`,`slot` FROM `" + mysql_db + "`.`save` WHERE `slot` = ? && `username` = ?";
 					try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
 						pst.setInt(1, slot);
 						pst.setString(2, Functions.getUserName(hostname));
 						ResultSet rs = pst.executeQuery();
 						if (rs.next())
-							bot.sendMessage(bot.cfg_data.irc_channel, "In slot " + rs.getString("slot") + ": " + rs.getString("serverstring"));
+							bot.sendMessage(channel, "In slot " + rs.getString("slot") + ": " + rs.getString("serverstring"));
 						else
-							bot.sendMessage(bot.cfg_data.irc_channel, "You do not have anything saved to that slot!");
+							bot.sendMessage(channel, "You do not have anything saved to that slot!");
 					}
 					catch (SQLException e) {
 						Logger.logMessage(LOGLEVEL_IMPORTANT, "SQL Error in showSlot()");
@@ -680,13 +511,13 @@ public class MySQL {
 					}
 				}
 				else
-					bot.sendMessage(bot.cfg_data.irc_channel, "Slot must be between 1 and 10!");
+					bot.sendMessage(channel, "Slot must be between 1 and 10!");
 			}
 			else
-				bot.sendMessage(bot.cfg_data.irc_channel, "Slot must be a number.");
+				bot.sendMessage(channel, "Slot must be a number.");
 		}
 		else
-			bot.sendMessage(bot.cfg_data.irc_channel, "Incorrect syntax! Correct usage is .load <slot>");
+			bot.sendMessage(channel, "Incorrect syntax! Correct usage is .slot <slot>");
 	}
 
 	/**
@@ -694,7 +525,7 @@ public class MySQL {
 	 * @param hostname String - the user's hostname (or hostmask)
 	 * @return String - username
 	 */
-	public static String getUsername(String hostname) {
+	public static String getUsername(String hostname) {		
 		String query = "SELECT `username` FROM " + mysql_db + ".`hostmasks` WHERE `hostmask` = ?";
 		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
 			pst.setString(1, hostname);
@@ -707,21 +538,68 @@ public class MySQL {
 		catch (SQLException e) {
 			Logger.logMessage(LOGLEVEL_IMPORTANT, "SQL Error in getUsername()");
 			e.printStackTrace();
-			return null;
 		}
+		return null;
 	}
 	
-	public static void addServerToRecovery(Server server) {
-		String query = "INSERT INTO `" + mysql_db + "`.`server_recovery` (`uid`, `hostcmd`, `port`, `owner`, `owner_nick`, `owner_hostname`) VALUES (?, ?, ?, ?, ?, ?)";
+	/**
+	 * Adds a ban to the banlist
+	 * @param ip String - ip of the person to ban
+	 * @param reason String - the reason to show they are banned for
+	 */
+	public static boolean addBan(String ip, String reason, String sender) {
+		String date = String.valueOf(System.currentTimeMillis() / 1000L);
+		String query = "INSERT INTO `" + mysql_db + "`.`banlist` (ip, reason, banner, date) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE `reason` = ?, `banner` = ?, `date` = ?";
+		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
+			pst.setString(1, ip);
+			pst.setString(2, reason);
+			pst.setString(3, sender);
+			pst.setString(4, date);
+			pst.setString(5, reason);
+			pst.setString(6, sender);
+			pst.setString(7, date);
+			if (pst.executeUpdate() == 1) {
+				return true;
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+			logMessage(LOGLEVEL_IMPORTANT, "Could not add ban to banlist");
+		}
+		return false;
+	}
+	
+	/**
+	 * Adds an IP to the known IPs list so they don't need to get checked by IPIntel multiple times
+	 * @param ip String - ip to be added
+	 */
+	public static boolean addKnownIP(String ip) {
+		String query = "INSERT INTO `" + mysql_db + "`.`known_ips` (ip) VALUES (?)";
+		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
+			pst.setString(1, ip);
+			if (pst.executeUpdate() == 1) {
+				return true;
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+			logMessage(LOGLEVEL_IMPORTANT, "Could not add ban to known IP list");
+		}
+		return false;
+	}
+
+	public static boolean addServerToRecovery(Server server) { return true;
+		/* [DA] Recovery is broken, for some reason NPEs happen with no trace to debug. For now, it's disabled.
+		String query = "INSERT INTO `" + mysql_db + "`.`server_recovery` (`uid`, `hostcmd`, `port`, `owner`, `owner_nick`, `owner_hostname`, `node`) VALUES (?, ?, ?, ?, ?, ?, ?)";
 		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
 			pst.setString(1, server.server_id);
 			pst.setString(2, server.host_command);
-			pst.setInt(3, server.port);
-			pst.setString(4, getUsername(server.irc_hostname));
+			pst.setInt(3, 10666);
+			pst.setString(4, Functions.getUserName(server.irc_hostname));
 			pst.setString(5, server.sender);
 			pst.setString(6, server.irc_hostname);
-			if (pst.executeUpdate() == 1) {
-				
+			pst.setString(7, bot.cfg_data.irc_name);
+			if (pst.executeUpdate() >= 1) {
+				bot.sendDebugMessage("Added server to recovery");
+				return true;
 			}
 			else
 				bot.sendLogErrorMessage("Failed to add server to recovery: " + server.server_id);
@@ -729,62 +607,94 @@ public class MySQL {
 			e.printStackTrace();
 			logMessage(LOGLEVEL_IMPORTANT, "Could not add server to recovery");
 		}
+		return false;
+		*/
 	}
 	
-	public static void removeServerFromRecovery(Server server) {
-		String query = "DELETE FROM `" + mysql_db + "`.`server_recovery` WHERE `uid`=?";
+	public static boolean removeServerFromRecovery(String server_id) { return true;
+		/* [DA] Recovery is broken, for some reason NPEs happen with no trace to debug. For now, it's disabled.
+		String query = "DELETE FROM `" + mysql_db + "`.`server_recovery` WHERE `uid`=? AND `node`=?";
 		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
-			pst.setString(1, server.server_id);
-			if (pst.executeUpdate() == 1) {
-				
+			pst.setString(1, server_id);
+			pst.setString(2, bot.cfg_data.irc_name);
+			if (pst.executeUpdate() >= 1) {
+				bot.sendDebugMessage("Removed server from recovery");
+				return true;
 			}
 			else
-				bot.sendLogErrorMessage("Failed to remove server from recovery: " + server.server_id);
+				bot.sendLogErrorMessage("Failed to remove server from recovery: " + server_id);
 		} catch (SQLException e) {
 			e.printStackTrace();
 			logMessage(LOGLEVEL_IMPORTANT, "Could not remove server from recovery");
 		}
+		return false;
+		*/
 	}
 	
-	public static boolean clearRecovery() {
-		String query = "TRUNCATE TABLE `" + mysql_db + "`.`server_recovery`";
+	public static boolean serverInRecovery(String server_id) { return false;
+		/* [DA] Recovery is broken, for some reason NPEs happen with no trace to debug. For now, it's disabled.
+		String query = "SELECT * FROM `" + mysql_db + "`.`server_recovery` WHERE `uid`=? AND `node`=?";
 		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
-			if (pst.executeUpdate() == 1) {
+			pst.setString(1, server_id);
+			pst.setString(2, bot.cfg_data.irc_name);
+			ResultSet r = pst.executeQuery();
+			if (r.next()) {
+				return true;
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+			logMessage(LOGLEVEL_IMPORTANT, "Could not check if server is in recovery");
+		}
+		return false;
+		*/
+	}
+	
+	public static boolean clearRecovery() { return true;
+		/* [DA] Recovery is broken, for some reason NPEs happen with no trace to debug. For now, it's disabled.
+		String query = "DELETE FROM `" + mysql_db + "`.`server_recovery` WHERE `node`=?";
+		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
+			pst.setString(1, bot.cfg_data.irc_name);
+			if (pst.executeUpdate() >= 1) {
+				bot.sendDebugMessage("Cleared server recovery");
 				return true;
 			}
 			else
-				bot.sendLogErrorMessage("Failed to clear recovery!!");
+				bot.sendLogErrorMessage("Failed to clear recovery");
 		} catch (SQLException e) {
 			e.printStackTrace();
 			logMessage(LOGLEVEL_IMPORTANT, "Could not clear recovery");
 		}
-		
 		return false;
+		*/
 	}
 	
-	public static boolean shouldRecover() {
-		String query = "SELECT COUNT(*) AS rowcount FROM `" + mysql_db + "`.`server_recovery`";
+	public static boolean shouldRecover() { return false;
+		/* [DA] Recovery is broken, for some reason NPEs happen with no trace to debug. For now, it's disabled.
+		String query = "SELECT * FROM `" + mysql_db + "`.`server_recovery` WHERE `node`=?";
 		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
+			pst.setString(1, bot.cfg_data.irc_name);
 			ResultSet set = pst.executeQuery();
-			
 			if (set.next()) {
+				bot.sendDebugMessage("Found servers to recover");
 				return true;
 			}
-			return false;
 		} catch (SQLException e) {
 			e.printStackTrace();
-			logMessage(LOGLEVEL_IMPORTANT, "Could not clear recovery");
+			logMessage(LOGLEVEL_IMPORTANT, "Could not recover servers");
 		}
 		return false;
+		*/
 	}
 	
-	public static int doRecovery() {
-		String query = "SELECT COUNT(*) AS rowcount FROM `" + mysql_db + "`.`server_recovery`";
+	public static void doRecovery() { return;
+		/* [DA] Recovery is broken, for some reason NPEs happen with no trace to debug. For now, it's disabled.
+		String query = "SELECT * FROM `" + mysql_db + "`.`server_recovery` WHERE `node`=? ORDER BY owner ASC";
 		try (Connection con = getConnection(); PreparedStatement pst = con.prepareStatement(query)) {
+			pst.setString(1, bot.cfg_data.irc_name);
 			ResultSet set = pst.executeQuery();
-
 			bot.recovering = true;
 			int recovered = 0;
+			int failed = 0;
 			while (set.next()) {
 				String id = set.getString("uid");
 				String cmd = set.getString("hostcmd");
@@ -792,20 +702,34 @@ public class MySQL {
 				String owner = set.getString("owner");
 				String ownerNick = set.getString("owner_nick");
 				String ownerHostname = set.getString("owner_hostname");
-				
-				Server s = Server.handleHostCommand(bot, bot.servers, bot.cfg_data.irc_channel, ownerNick, ownerHostname, cmd, MySQL.getLevel(ownerHostname), false, port, id);
+				Server s = Server.handleHostCommand(bot, bot.servers, bot.cfg_data.irc_channel, ownerNick, owner, cmd, MySQL.getLevel(owner), false, port, id, true);
+				String hostname = cmd;
+				Pattern regex = Pattern.compile("(\\w+)=\"*((?<=\")[^\"]+(?=\")|([^\\s]+))\"*");
+				Matcher m = regex.matcher(cmd);
+				while (m.find()) {
+					switch (m.group(1).toLowerCase()) {
+						case "hostname":
+							hostname = m.group(2);
+							break;
+					}
+				}
 				if (s != null) {
 					recovered++;
 				}
+				else {
+					failed++;
+				}
 			}
 			bot.recovering = false;
-			
-			return recovered;
+			bot.sendMessage(bot.cfg_data.irc_channel, "Recovered " + recovered + " server(s).");
+			if (failed > 0) { bot.sendMessage(bot.cfg_data.irc_channel, "Failed to recover " + failed + " server(s)."); }
+			return;
 		} catch (SQLException e) {
 			e.printStackTrace();
-			logMessage(LOGLEVEL_IMPORTANT, "Could not clear recovery");
+			logMessage(LOGLEVEL_IMPORTANT, "Error: Could not recover servers");
 		}
-		
-		return -1;
+		bot.recovering = false;
+		return;
+		*/
 	}
 }

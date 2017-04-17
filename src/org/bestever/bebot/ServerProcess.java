@@ -23,6 +23,9 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.*;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 
 import org.jibble.pircbot.Colors;
 
@@ -43,6 +46,7 @@ public class ServerProcess extends Thread {
 	 * A reference to the server
 	 */
 	private Server server;
+
 
 	/**
 	 * The process of the server
@@ -89,7 +93,7 @@ public class ServerProcess extends Thread {
 		server.bot.removeServerFromLinkedList(this.server);
 		if (getPid() != -1)  {
 			try {
-				String command = "pkill -9 -P " + getPid();
+				String command = "kill -9 " + getPid();
 				server.bot.sendDebugMessage("using " + command);
 				Runtime.getRuntime().exec(command);
 			} catch (Exception ex) {
@@ -125,6 +129,9 @@ public class ServerProcess extends Thread {
 
 		// This must always be first (we may also want a custom binary, so do that here as well)
 		serverRunCommands.add(server.version.path);
+		
+		// Add fake parameters for who hosted the server
+		addParameter("-owner", server.irc_hostname);
 
 		// Check if we have a temporary port
 		// This will try to host the server on the same port as before
@@ -135,12 +142,6 @@ public class ServerProcess extends Thread {
 
 		// Load the global configuration file
 		addParameter("+exec", server.bot.cfg_data.bot_cfg_directory_path + "global.cfg");
-
-		// Create a custom wadpage for us
-		String key = MySQL.createWadPage(Functions.implode(this.server.wads, ","));
-
-		// Add the custom page to sv_website to avoid large wad list lookups
-		addParameter("+sv_website", "http://allfearthesentinel.net/wadpage?key=" + key);
 
 		if (server.iwad != null)
 			addParameter("-iwad", server.bot.cfg_data.bot_iwad_directory_path + server.iwad);
@@ -161,13 +162,10 @@ public class ServerProcess extends Thread {
 			for (String wad : server.wads) {
 				if (Server.isIwad(wad))
 					addParameter("-file", server.bot.cfg_data.bot_iwad_directory_path + wad);
-				else
+				else if (wad != null && !wad.trim().isEmpty())
 					addParameter("-file", server.bot.cfg_data.bot_wad_directory_path + wad);
 			}
 		}
-
-		if (server.config != null)
-			addParameter("+exec", server.bot.cfg_data.bot_cfg_directory_path + server.config);
 
 		// Optional WADs
 		if (server.optwads.size() > 0) {
@@ -175,11 +173,18 @@ public class ServerProcess extends Thread {
 				addParameter("-optfile", server.bot.cfg_data.bot_wad_directory_path + wad);
 			}
 		}
+		
+		if (server.map != null)
+			addParameter("+map", server.map);
 
 		addParameter("+skill", String.valueOf((server.skill != -1) ? server.skill : 3));
 
-		if (server.gamemode != null)
+		if (server.gamemode != null) {
+			if (server.gamemode != "cooperative" || server.gamemode != "survival") {
+				addParameter("+cooperative", " 0");
+			}
 			addParameter("+" + server.gamemode, " 1");
+		}
 
 		if (server.dmflags > 0)
 			addParameter("+dmflags", Integer.toString(server.dmflags));
@@ -187,14 +192,14 @@ public class ServerProcess extends Thread {
 		if (server.dmflags2 > 0)
 			addParameter("+dmflags2", Integer.toString(server.dmflags2));
 
-		if (server.dmflags3 > 0)
-			addParameter("+dmflags3", Integer.toString(server.dmflags3));
+		if (server.zadmflags > 0)
+			addParameter("+zadmflags", Integer.toString(server.zadmflags));
 
 		if (server.compatflags > 0)
 			addParameter("+compatflags", Integer.toString(server.compatflags));
 
-		if (server.compatflags2 > 0)
-			addParameter("+compatflags2", Integer.toString(server.compatflags2));
+		if (server.zacompatflags > 0)
+			addParameter("+zacompatflags", Integer.toString(server.zacompatflags));
 
 		if (server.instagib)
 			addParameter("+instagib", "1");
@@ -202,17 +207,31 @@ public class ServerProcess extends Thread {
 		if (server.buckshot)
 			addParameter("+buckshot", "1");
 
+		if (server.config != null)
+			addParameter("+exec", server.bot.cfg_data.bot_cfg_directory_path + server.config);
+
 		if (server.servername != null)
 			addParameter("+sv_hostname", server.bot.cfg_data.bot_hostname_base + " " + server.servername);
-
+			
 		// Add rcon/file based stuff
-		addParameter("+sv_rconpassword", server.server_id);
-		addParameter("+sv_banfile", server.bot.cfg_data.bot_banlistdir + server.server_id + ".txt");
-		addParameter("+sv_adminlistfile", server.bot.cfg_data.bot_adminlistdir + server.server_id + ".txt");
-		addParameter("+sv_banexemptionfile", server.bot.cfg_data.bot_whitelistdir + server.server_id + ".txt");
+		addParameter("+sv_rconpassword", server.rcon_password);
+		addParameter("+sv_password", server.server_password);
+		addParameter("+sv_joinpassword", server.server_password);
+		addParameter("+sv_banfile", server.bot.cfg_data.bot_banlistdir + server.irc_hostname + ".txt");
+		addParameter("+sv_adminlistfile", server.bot.cfg_data.bot_adminlistdir + server.irc_hostname + ".txt");
+		addParameter("+sv_banexemptionfile", server.bot.cfg_data.bot_whitelistdir + server.irc_hostname + ".txt");
 
-		// Add the RCON
-		server.rcon_password = server.server_id;
+		// Create a custom wadpage for us
+		server.wads.addAll(server.optwads);
+		server.wads = Functions.removeDuplicateWads(server.wads);
+		String key = MySQL.createWadPage(Functions.implode(server.wads, ","));
+
+		// Add the custom page to sv_website to avoid large wad list lookups
+		addParameter("+sv_website", server.bot.cfg_data.website_link + "/wadpage?key=" + key);
+
+		// Add the passwords to join and connect separately
+		server.join_password = server.server_password;
+		server.connect_password = server.server_password;
 	}
 
 	/**
@@ -235,7 +254,9 @@ public class ServerProcess extends Thread {
 	@Override
 	public void run() {
 		server.bot.sendDebugMessage("Attempting to start server.");
+//		try { Thread.sleep(10000); } catch (InterruptedException e) { e.printStackTrace(); }
 		String portNumber = ""; // This will hold the port number
+		String ipAddress = "";
 		File logFile, banlist, whitelist, adminlist;
 		String strLine, dateNow;
 		server.time_started = System.currentTimeMillis();
@@ -245,18 +266,17 @@ public class ServerProcess extends Thread {
 		SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MMM-dd HH:mm:ss");
 		try {
 			// Ensure we have the files created
-			banlist = new File(server.bot.cfg_data.bot_banlistdir + server.server_id + ".txt");
-			System.out.println(server.bot.cfg_data.bot_banlistdir + server.server_id + ".txt");
+			banlist = new File(server.bot.cfg_data.bot_banlistdir + server.irc_hostname + ".txt");
 			if (!banlist.exists())
 				banlist.createNewFile();
-			whitelist = new File(server.bot.cfg_data.bot_whitelistdir + server.server_id + ".txt");
+			whitelist = new File(server.bot.cfg_data.bot_whitelistdir + server.irc_hostname + ".txt");
 			if (!whitelist.exists())
 				whitelist.createNewFile();
-			adminlist = new File(server.bot.cfg_data.bot_adminlistdir + server.server_id + ".txt");
+			adminlist = new File(server.bot.cfg_data.bot_adminlistdir + server.irc_hostname + ".txt");
 			if (!adminlist.exists())
 				adminlist.createNewFile();
 
-			server.bot.sendDebugMessage("Building process.");
+			server.bot.sendDebugMessage("Building process");
 			// Set up the server
 			ProcessBuilder pb = new ProcessBuilder(serverRunCommands.toArray(new String[serverRunCommands.size()]));
 			// Redirect stderr to stdout
@@ -271,29 +291,36 @@ public class ServerProcess extends Thread {
 
 			// Set up file/IO
 			logFile = new File(server.bot.cfg_data.bot_logfiledir + server.server_id + ".txt");
-			bw = new BufferedWriter(new FileWriter(server.bot.cfg_data.bot_logfiledir + server.server_id + ".txt"));
+			bw = new BufferedWriter(new FileWriter(server.bot.cfg_data.bot_logfiledir + server.server_id + ".txt", true));
+			
 
 			// Create the logfile
 			if (!logFile.exists())
 				logFile.createNewFile();
+				
+			bw.write("----------------------------------------------------------------\n");
+			bw.write(" Server started at " + formatter.format(Calendar.getInstance().getTime()) + "\n");
+			bw.write(" Owner: " + server.sender + "\n");
+			bw.write(" Service: " + server.bot.cfg_data.service_name + "\n");
+			bw.write(" Node: " + server.bot.cfg_data.node_name + "\n");
+			bw.write(" Hostline: " + serverRunCommands.toString().replaceAll("^\\[","").replaceAll("\\]$","").replaceAll(", "," ") + "\n");
+			bw.write("----------------------------------------------------------------\n");
+			bw.flush();
+				
 
 			// Check if global RCON variable is set, or if the user has access to the RCON portion
 			// If either criteria is met, the user will be messaged the RCON password
 			// NOTE: As of now, BE users can still check the RCON password by accessing the control panel on the website.
 			// We'll fix this later by changing the RCON from the unique_id to a random MD5 hash
-			if (server.bot.cfg_data.bot_public_rcon || AccountType.isAccountTypeOf(server.user_level, AccountType.RCON) && !server.bot.recovering)
-				server.bot.sendMessage(server.sender, "Your unique server ID is: " + server.server_id + ". This is your RCON password, which can be used using 'send_password "+server.server_id+"' via the in-game console. You can view your logfile at http://static.allfearthesentinel.net/logs/" + server.server_id + ".txt");
-
-			if (!server.bot.recovering) server.bot.sendLogUserMessage(Colors.BOLD+server.sender+Colors.BOLD + " starts server with ID " + Colors.BOLD+server.server_id+Colors.BOLD);
-			
-			ArrayList<String> banCmds = MySQL.getBanCommands();
+			if (!this.server.recovering) {
+				server.bot.sendLogUserMessage(Colors.BOLD+server.sender+Colors.BOLD + " starts server '" + server.servername + "' with PID " + Colors.BOLD+getPid()+Colors.BOLD + " and UUID " + Colors.BOLD+server.server_id+Colors.BOLD + " - Log File: " + server.bot.cfg_data.static_link + "/logs/" + server.server_id + ".txt");
+			}
 			
 			// Process server while it outputs text
 			while ((strLine = br.readLine()) != null) {
 				String[] keywords = strLine.split(" ");
 				// Make sure to get the port [Server using alternate port 10666.]
 				if (strLine.startsWith("Server using alternate port ")) {
-					System.out.println(strLine);
 					portNumber = strLine.replace("Server using alternate port ", "").replace(".", "").trim();
 					if (Functions.isNumeric(portNumber)) {
 						server.port = Integer.parseInt(portNumber);
@@ -302,74 +329,194 @@ public class ServerProcess extends Thread {
 
 				// If the port is used [NETWORK_Construct: Couldn't bind to 10666. Binding to 10667 instead...]
 				} else if (strLine.startsWith("NETWORK_Construct: Couldn't bind to ")) {
-					System.out.println(strLine);
 					portNumber = strLine.replace("NETWORK_Construct: Couldn't bind to " + portNumber + ". Binding to ", "").replace(" instead...", "").trim();
 					if (Functions.isNumeric(portNumber)) {
 						server.port = Integer.parseInt(portNumber);
 					} else
 						server.bot.sendMessage(server.irc_channel, "Warning: port parsing error when setting up server [2]; contact an administrator.");
 				}
-
+				if (strLine.startsWith("IP address ")) {
+					server.address = strLine.replace("IP address ", "").trim();
+				}
 				// If we see this, the server started
 				if (strLine.equalsIgnoreCase("UDP Initialized.")) {
 					server.bot.sendDebugMessage("Found \"UDP Initialized.\" in server output. Assuming the server started.");
-					System.out.println(strLine);
-					server.bot.servers.add(server);
-					server.bot.vSHashmap.get(server.version.name).add(server);
-					MySQL.addServerToRecovery(server);
-					if (!server.bot.recovering) server.bot.sendMessage(server.irc_channel, "Server started successfully on port " + server.port + "!");
-					if (!server.bot.recovering) server.bot.sendMessage(server.sender, "To kill your server, in the channel " + server.bot.cfg_data.irc_channel + ", type .killmine to kill all of your servers, or .kill " + server.port + " to kill just this one.");
-					if (!server.bot.recovering) server.bot.sendLogUserMessage(Colors.BOLD+server.sender+Colors.BOLD + "'s server with ID " + Colors.BOLD+server.server_id+Colors.BOLD + " has been assigned port " + Colors.BOLD+server.port+Colors.BOLD);
-					
-					/*
-					if (banCmds != null) {
-						for (String command : banCmds) {
-							server.in.println(command);
+					try {
+						server.bot.servers.add(server);
+					} catch (Exception e) {
+						if (this.server.recovering)
+							System.out.println(server.sender+"'s server '" + server.servername + "' with UUID " + server.server_id + " was unable to be added to the linked list - Killing!");
+						else {
+							server.bot.sendMessage(server.irc_channel, "Server '" + server.servername + "' was unable to be added to the server list and has been killed. Please contact an Administrator.");
+							server.bot.sendLogErrorMessage(Colors.BOLD+server.sender+Colors.BOLD + "'s server with UUID "+Colors.BOLD+server.server_id+Colors.BOLD+" was unable to be added to the server list - Killing!");
 						}
-						
-						server.in.println("echo [TSPG] Applied " + banCmds.size() + " global bans");
+						e.printStackTrace();
+						server.serverprocess.terminateServer();
+						server.hide_stop_message = true;
+						server.in.close();
+						return;
 					}
-					*/
+					try {
+						server.bot.vSHashmap.get(server.version.name).add(server);
+					} catch (Exception e) {
+						if (this.server.recovering)
+							System.out.println(server.sender+"'s server '" + server.servername + "' with UUID " + server.server_id + " was unable to be added to the versions list");
+						else {
+							server.bot.sendLogErrorMessage(Colors.BOLD+server.sender+Colors.BOLD + "'s server with UUID "+Colors.BOLD+server.server_id+Colors.BOLD+" was unable to be added to the versions list");
+						}
+						e.printStackTrace();
+					}
+					if (!this.server.recovering) {
+//						if (!MySQL.serverInRecovery(server.server_id))
+//							MySQL.addServerToRecovery(server);
+						server.bot.sendLogServerMessage(Colors.BOLD+server.sender+Colors.BOLD + "'s server '" + server.servername + "' has been assigned port " + Colors.BOLD+server.port+Colors.BOLD);
+						server.bot.sendMessage(server.irc_channel, "Server '" + server.servername + "' started successfully on port " + server.port + "! zds://" + server.address + "/za");
+						server.bot.sendMessage(server.sender, "Server '" + server.servername + "' started successfully on port " + server.port + "! - To kill your server, in the channel " + server.bot.cfg_data.irc_channel + ", type .kill " + server.port);
+						server.bot.sendMessage(server.sender, "Your unique server ID is: " + server.server_id + ". You can view your logfile at " + server.bot.cfg_data.static_link + "/logs/" + server.server_id + ".txt");
+						server.bot.sendMessage(server.sender, "Your RCON password is "+server.rcon_password+". Your server's connect and join passwords are "+server.server_password+" if you have either of those enabled.");
+					}
+					else {
+						System.out.println("Server '" + server.servername + "' with UUID " + server.server_id + " started successfully on port " + server.port + "!");
+					}
+					this.server.recovering = false;
 				}
 
-				// Check for banned players
-				if (keywords[0].equals("CONNECTION")) {
-					String ip = keywords[keywords.length-1].split(":")[0];
-					String pIP;
-					if ((pIP = MySQL.checkBanned(ip)) != null)
-						server.in.println("addban " + pIP + " perm \"You have been banned from TSPG. If you feel that this is an error, please visit irc.zandronum.com #tspg-<nodename>\"");
+				// Check for globally banned players
+				String name = null;
+				String ip = null;
+				Boolean skipipintel = false;
+				
+				// Reading "Player (IP) has connected." (3.0+)
+				// This only works in 3.0 as that version prints the IP of who connected within the connect string
+				Pattern pattern1 = Pattern.compile("(?:\\n|^)(?!CHAT )(.*?) \\(([0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3})\\:[0-9]{1,5}\\) has connected\\.$");
+				Matcher matcher1 = pattern1.matcher(strLine);
+				if (matcher1.find())
+				{
+					name = matcher1.group(1);
+					ip = matcher1.group(2);
+				}
+				/*
+				// Reading "Player has connected." (2.1.2-)
+				Pattern pattern2 = Pattern.compile("(?:\\n|^)(?!CHAT )(.*?) has connected\\.$");
+				Matcher matcher2 = pattern2.matcher(strLine);
+				if (matcher2.find())
+				{
+					server.in.flush(); server.in.println("getip " + Functions.escapeQuotes(matcher2.group(1).replace(" ","\\ "))+";\n");
 				}
 
-                if (keywords[0].equals("CHAT") && server.bot.cfg_data.irc_relay) {
-                    int commaIndex = strLine.indexOf(":");
-					int ircIndex = strLine.indexOf("!irc ", commaIndex);
-                    System.out.println(String.format("comma: %d | irc: %d | str: %s", commaIndex, ircIndex, strLine));
-                    if (commaIndex != -1 && ircIndex == 1) {
-                        String sender = strLine.substring(0, commaIndex);
-                        String message = strLine.substring(ircIndex, strLine.length());
-
-                        server.bot.sendMessage(server.irc_channel, server.port + " | " + sender + ":" + message);
-                    }
+				// Reading GetIP Player
+				// This method is actually unreliable in vanilla 2.1.2 as multiple people can have the same name :/
+				// A custom binary that disallows duplicate names or shows the IP in the "has connected." line like in 3.0
+				// Once 3.0 is released as stable, this method will be removed.
+				Pattern pattern3 = Pattern.compile("(?:\\n|^)(?!CHAT )(.*?)'s IP is: ([0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3})\\:[0-9]{1,5}$");
+				Matcher matcher3 = pattern3.matcher(strLine);
+				if (matcher3.find())
+				{
+					name = matcher3.group(1);
+					ip = matcher3.group(2);
+				}
+				*/
+				// Reading PlayerInfo
+				Pattern pattern4 = Pattern.compile("(?:\\n|^)[0-9]{1,2}\\. (.*?) - IP ([0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3})\\:[0-9]{1,5}");
+				Matcher matcher4 = pattern4.matcher(strLine);
+				if (matcher4.find())
+				{
+					name = matcher4.group(1);
+					ip = matcher4.group(2);
+					skipipintel = true;
+				}
+				
+				// If we have an IP and a name, check if they are behind a proxy or are banned
+				if (name != null && ip != null) {
+					if (!MySQL.checkWhitelisted(ip)) {
+						if (server.bot.cfg_data.ipintel_enabled && !skipipintel)
+						{
+							IPIntel.query(ip, name, server);
+						}
+						String decIP = MySQL.checkBanned(ip);
+						String reason = MySQL.getBannedReason(decIP);
+						if (decIP != null)
+						{
+							server.bot.sendLogErrorMessage(Colors.BOLD+name+Colors.BOLD+" with ip "+Colors.BOLD+ip+Colors.BOLD+" was kicked from " + Colors.BOLD+server.sender+Colors.BOLD + "'s server on port "+Colors.BOLD+server.port+Colors.BOLD+" as they're globally banned with reason: " + Colors.BOLD+reason+Colors.BOLD);
+							server.in.flush(); server.in.println("addban " + ip + " perm " + "\"\\ciBanned from all " + server.bot.cfg_data.service_short + " servers: " + reason + "\";\n");
+						}
+					}
+				}
+				
+				
+				// Check for Hostname changes
+				Pattern pattern5 = Pattern.compile("(?:\\n|^)-> sv_hostname\\s+(.*?)\\s*(?:\\(RCON|$)");
+				Matcher matcher5 = pattern5.matcher(strLine);
+				if (matcher5.find()) {
+					String old = server.servername;
+					server.servername = matcher5.group(1).replaceAll("^\"","").replaceAll("\"$","");
+					if (!Pattern.compile("(?:\\n|^)\\s*$").matcher(server.servername).find()) {
+						if (old != server.servername) {
+							if (server.user_level < 2) {
+								server.in.flush(); server.in.println("sv_hostname \"" + server.bot.cfg_data.bot_hostname_base + " " + Functions.escapeQuotes(server.servername) + "\";\n");
+							}
+							server.bot.sendMessage(server.sender, "Hostname for '" + old + "' on port " + server.port + " has been changed to: '" + server.servername + "'");
+							server.bot.sendLogServerMessage("Hostname for " + Colors.BOLD+server.sender+Colors.BOLD + "'s server on port "+Colors.BOLD+server.port+Colors.BOLD+" has been changed to: "+Colors.BOLD+server.servername+Colors.BOLD);
+						}
+					}
 				}
 
 				// Check for RCON password changes
-				if (keywords.length > 3) {
-					if (keywords[0].equals("->") && keywords[1].equalsIgnoreCase("sv_rconpassword"))
-						server.rcon_password = keywords[2];
-					else if (keywords[0].equalsIgnoreCase("\"sv_rconpassword\""))
-						server.rcon_password = keywords[2].replace("\"","");
+				Pattern pattern6 = Pattern.compile("(?:\\n|^)-> sv_rconpassword\\s+(.*?)\\s*(?:\\(RCON|$)");
+				Matcher matcher6 = pattern6.matcher(strLine);
+				if (matcher6.find()) {
+					String old = server.rcon_password;
+					server.rcon_password = matcher6.group(1);
+					if (!Pattern.compile("(?:\\n|^)\\s*$").matcher(server.rcon_password).find()) {
+						if (server.rcon_password.length() < 5) {
+							server.bot.sendMessage(server.sender, "RCON Password change for '" + server.servername + "' on port " + server.port + " failed: Must be 5 or more characters!");
+						}
+						else if (old != server.rcon_password) {
+							server.bot.sendMessage(server.sender, "RCON Password for '" + server.servername + "' on port " + server.port + " has been changed to: '" + server.rcon_password + "'");
+						}
+					}
+				}
+
+				// Check for Join password changes
+				Pattern pattern7 = Pattern.compile("(?:\\n|^)-> sv_joinpassword\\s+(.*?)\\s*(?:\\(RCON|$)");
+				Matcher matcher7 = pattern7.matcher(strLine);
+				if (matcher7.find()) {
+					String old = server.join_password;
+					server.join_password = matcher7.group(1);
+					if (!Pattern.compile("(?:\\n|^)\\s*$").matcher(server.join_password).find()) {
+						if (server.join_password.length() < 5) {
+							server.bot.sendMessage(server.sender, "Join Password change for '" + server.servername + "' on port " + server.port + " failed: Must be 5 or more characters!");
+						}
+						else if (old != server.join_password) {
+							server.bot.sendMessage(server.sender, "Join Password for '" + server.servername + "' on port " + server.port + " has been changed to: '" + server.join_password + "'");
+						}
+					}
+				}
+
+				// Check for Connect password changes
+				Pattern pattern8 = Pattern.compile("(?:\\n|^)-> sv_password\\s+(.*?)\\s*(?:\\(RCON|$)");
+				Matcher matcher8 = pattern8.matcher(strLine);
+				if (matcher8.find()) {
+					String old = server.connect_password;
+					server.connect_password = matcher8.group(1);
+					if (!Pattern.compile("(?:\\n|^)\\s*$").matcher(server.connect_password).find()) {
+						if (server.connect_password.length() < 5) {
+							server.bot.sendMessage(server.sender, "Connect Password change for '" + server.servername + "' on port " + server.port + " failed: Must be 5 or more characters!");
+						}
+						else if (old != server.connect_password) {
+							server.bot.sendMessage(server.sender, "Connect Password for '" + server.servername + "' on port " + server.port + " has been changed to: '" + server.connect_password + "'");
+						}
+					}
 				}
 
 				// If we have a player joining or leaving, mark this server as active
-				if (strLine.endsWith("has connected.") || strLine.endsWith("disconnected."))
+				if (strLine.endsWith("joined the game."))
 					last_activity = System.currentTimeMillis();
 
 				dateNow = formatter.format(Calendar.getInstance().getTime());
 				bw.write(dateNow + " " + strLine + "\n");
 				bw.flush();
 			}
-
-			MySQL.removeServerFromRecovery(server);
 			server.bot.sendDebugMessage("Server possibly stopped.");
 			// Handle cleanup
 			dateNow = formatter.format(Calendar.getInstance().getTime());
@@ -382,44 +529,39 @@ public class ServerProcess extends Thread {
 			if (!server.hide_stop_message) {
 				if (server.port != 0) {
 					if (server.being_killed) {
-						server.bot.sendMessage(server.irc_channel, "Server stopped on port " + server.port + "! Server ran for " + Functions.calculateTime(uptime));
+						if (MySQL.serverInRecovery(server.server_id))
+							MySQL.removeServerFromRecovery(server.server_id);
+						if (server.being_killed_by_owner) {
+							server.bot.sendMessage(server.irc_channel, "Server '" + server.servername + "' on port " + server.port + " stopped! Server ran for " + Functions.calculateTime(uptime));
+						}
+						else {
+							server.bot.sendMessage(server.irc_channel, server.sender + "'s server '" + server.servername + "' on port " + server.port + " stopped! Server ran for " + Functions.calculateTime(uptime));
+							server.bot.sendMessage(server.sender, "Server '" + server.servername + "' on port " + server.port + " stopped! Server ran for " + Functions.calculateTime(uptime));
+						}
 						// Don't log as we already log kill commands
 					} else {
-						server.bot.sendMessage(server.irc_channel, "Server crashed on port " + server.port + "! Server ran for " + Functions.calculateTime(uptime));
-						
-						String owner = server.sender;
-						server.bot.sendLogErrorMessage(Colors.BOLD+owner+Colors.BOLD+"'s server on port " + Colors.BOLD+server.port+Colors.BOLD + " " + Colors.RED+Colors.BOLD+ "CRASHED" +Colors.NORMAL+ "!!!");
-						server.bot.sendLogErrorMessage("A log is available at " + Colors.BOLD + "http://static.allfearthesentinel.net/logs/" + server.server_id + ".txt" + Colors.BOLD);
+						server.bot.sendMessage(server.irc_channel, server.sender + "'s server '" + server.servername + "' on port " + server.port + " crashed! Server ran for " + Functions.calculateTime(uptime));
+						server.bot.sendMessage(server.sender, "Server '" + server.servername + "' on port " + server.port + " crashed! Server ran for " + Functions.calculateTime(uptime));
+						server.bot.sendLogErrorMessage(Colors.BOLD+server.sender+Colors.BOLD+"'s server on port " + Colors.BOLD+server.port+Colors.BOLD + " " + Colors.RED+Colors.BOLD+ "CRASHED" +Colors.NORMAL+ "!!! - A log is available at " + Colors.BOLD + server.bot.cfg_data.static_link + "/logs/" + server.server_id + ".txt" + Colors.BOLD);
 					}
 				}
-				else {
-					server.bot.sendMessage(server.irc_channel, "Server was not started. This is most likely due to a wad error, missing required wads or requires a later game version. See the log for more details.");
-					
+				else if (!this.server.recovering) {
+					server.bot.sendMessage(server.irc_channel, "Server '" + server.servername + "' was unable to start.");
+					server.bot.sendMessage(server.sender, "Server '" + server.servername + "' was unable to start. This is most likely due to a wad error, incorrect load order, missing required wads or requires a later game version. See your log file for more details.");
+					server.bot.sendMessage(server.sender, "You can view your logfile at " + server.bot.cfg_data.static_link + "/logs/" + server.server_id + ".txt");
+					server.bot.sendLogServerMessage(Colors.BOLD+server.sender+Colors.BOLD+"'s server '" + server.servername + "' was unable to start. See the log file for more details.");
 				}
 			}
 
 			// Remove from the Linked List
 			server.bot.removeServerFromLinkedList(this.server);
-
-            server.bot.sendDebugMessage("Hitting the autorestart check now!");
-			// Auto-restart the server if enabled, and only if successfully started
-			if (server.auto_restart && server.port != 0 && this.restarts < cfg_data.max_restarts) {
-				server.bot.sendDebugMessage("Attempting to auto-restart port " + server.port);
-				this.restarts++;
-				server.temp_port = server.port;
-				server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Server crashed! Attempting to restart server...");
-				server.bot.processHost(server.user_level, server.bot.cfg_data.irc_channel, server.sender, server.irc_hostname, server.host_command, true, server.port);
-			} else {
-                server.bot.sendDebugMessage("Check failed. autorestart=" + (server.auto_restart ? "true" : "false") + "; port=" + server.port + "; restarts=" + this.restarts + "/" + cfg_data.max_restarts);
-            }
-
 		} catch (Exception e) {
 			StackTraceElement[] trace = e.getStackTrace();
 			server.bot.sendDebugMessage("EXCEPTION - " + e.getMessage());
 			for (StackTraceElement element : trace)
 				server.bot.sendDebugMessage("TRACE - " + element.toString());
-
 			e.printStackTrace();
+			server.bot.removeServerFromLinkedList(this.server);
 		} finally {
 			try {
 				if (bw != null)

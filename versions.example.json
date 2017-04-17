@@ -1,0 +1,4 @@
+[
+        { "name": "2.1.2", "path": "/home/user/zandronum/2.1.2/zandronum-server", "default": true, "description": "Zandronum 2.1.2", "data": "skulltag_content2.1a.pk3" },
+        { "name": "3.0", "path": "/home/user/zandronum/3.0/zandronum-server", "default": false, "description": "Zandronum 3.0-r161030-2038, for testing", "data": "skulltag_content-3.0-beta01.pk3" },
+]

@@ -22,9 +22,14 @@ public class AccountType {
 	 **/
 	
 	/**
+	 * Banned Users
+	 */
+	public static final int BANNED = 0;
+	
+	/**
 	 * Guests are users who are not logged into BestBot or NickServ.
 	 */
-	public static final int GUEST = 0;
+	public static final int GUEST = -1;
 	
 	/**
 	 * Normal users.

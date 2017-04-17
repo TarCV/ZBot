@@ -24,11 +24,17 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.security.MessageDigest;
 
 import static org.bestever.bebot.Logger.*;
 import static org.bestever.bebot.MySQL.SERVER_ONLINE;
 
 public class Server {
+
+	/**
+	 * Tempoary boolean to determine if recovering or not. Required for ServerProcess since it's a threaded process.
+	 */
+	public boolean recovering;
 
 	/**
 	 * Holds the temporary port
@@ -66,6 +72,11 @@ public class Server {
 	public Bot bot;
 
 	/**
+	 * Contains the ip:port it is run on
+	 */
+	public String address;
+
+	/**
 	 * Contains the port it is run on
 	 */
 	public int port;
@@ -81,6 +92,13 @@ public class Server {
 	public String server_id;
 
 	/**
+	 * This is the generated password at the very start for connect and join if enabled from config
+	 */
+	public String server_password;
+	public String join_password;
+	public String connect_password;
+
+	/**
 	 * Username of the person who sent the command to start it
 	 */
 	public String sender;
@@ -94,6 +112,7 @@ public class Server {
 	 * This is the host's hostname on irc
 	 */
 	public String irc_hostname;
+	public String alt_hostname;
 
 	/**
 	 * This is the login name used
@@ -125,6 +144,11 @@ public class Server {
 	 */
 	public String iwad;
 
+	/**
+	 * This sets the starting map
+	 */
+	public String map;
+	
 	/**
 	 * Contains the gamemode
 	 */
@@ -183,7 +207,7 @@ public class Server {
 	/**
 	 * Contains flags for the server
 	 */
-	public int dmflags3;
+	public int zadmflags;
 
 	/**
 	 * Contains flags for the server
@@ -193,7 +217,7 @@ public class Server {
 	/**
 	 * Contains flags for the server
 	 */
-	public int compatflags2;
+	public int zacompatflags;
 
 	/**
 	 * Contains the play_time in percentage
@@ -214,6 +238,7 @@ public class Server {
 	 * This is so we can tell if we crashed or not
 	 */
 	public boolean being_killed = false;
+	public boolean being_killed_by_owner = false;
 	
 	/**
 	 * If there's an error with processing of numbers, return this
@@ -243,7 +268,9 @@ public class Server {
 	 * @param hostname The hostname of the sender
 	 * @param message The message sent
 	 */
-	public static Server handleHostCommand(Bot botReference, LinkedList<Server> servers, String channel, String sender, String hostname, String message, int userLevel, boolean autoRestart, int port, String id) {
+	public static Server handleHostCommand(Bot botReference, LinkedList<Server> servers, String channel, String sender, String hostname, String message, int userLevel, boolean autoRestart, int port, String id, boolean recovering) {
+//		try { Thread.sleep(100); } catch (InterruptedException e) { e.printStackTrace(); }
+	
 		// Initialize server without linking it to the ArrayList
 		Server server = new Server();
 
@@ -288,7 +315,7 @@ public class Server {
 					if (v != null) {
 						server.version = v;
 					} else {
-						if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Invalid version.");
+						server.bot.sendMessage(channel, "Invalid version.");
 						return null;
 					}
 
@@ -300,21 +327,20 @@ public class Server {
 				case "compatflags":
 					server.compatflags = handleGameFlags(m.group(2));
 					if (server.compatflags == FLAGS_ERROR) {
-						if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Problem with parsing compatflags");
+						server.bot.sendMessage(channel, "Problem with parsing compatflags");
 						return null;
 					}
 					break;
-				case "compatflags2":
 				case "zacompatflags":
-					server.compatflags2 = handleGameFlags(m.group(2));
+					server.zacompatflags = handleGameFlags(m.group(2));
 					if (server.compatflags == FLAGS_ERROR) {
-						if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Problem with parsing compatflags2");
+						server.bot.sendMessage(channel, "Problem with parsing zacompatflags");
 						return null;
 					}
 					break;
 				case "config":
 					if (!server.checkConfig(server.bot.cfg_data.bot_cfg_directory_path + Functions.cleanInputFile(m.group(2).toLowerCase()))) {
-						if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Config file '" + m.group(2) + "' does not exist.");
+						server.bot.sendMessage(channel, "Config file '" + m.group(2) + "' does not exist.");
 						return null;
 					}
 					server.config = Functions.cleanInputFile(m.group(2).toLowerCase());
@@ -326,22 +352,21 @@ public class Server {
 				case "dmflags":
 					server.dmflags = handleGameFlags(m.group(2));
 					if (server.dmflags == FLAGS_ERROR) {
-						if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Problem with parsing dmflags");
+						server.bot.sendMessage(channel, "Problem with parsing dmflags");
 						return null;
 					}
 					break;
 				case "dmflags2":
 					server.dmflags2 = handleGameFlags(m.group(2));
 					if (server.dmflags2 == FLAGS_ERROR) {
-						if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Problem with parsing dmflags2");
+						server.bot.sendMessage(channel, "Problem with parsing dmflags2");
 						return null;
 					}
 					break;
-				case "dmflags3":
 				case "zadmflags":
-					server.dmflags3 = handleGameFlags(m.group(2));
-					if (server.dmflags3 == FLAGS_ERROR) {
-						if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Problem with parsing dmflags3");
+					server.zadmflags = handleGameFlags(m.group(2));
+					if (server.zadmflags == FLAGS_ERROR) {
+						server.bot.sendMessage(channel, "Problem with parsing zadmflags");
 						return null;
 					}
 					break;
@@ -357,6 +382,9 @@ public class Server {
 				case "iwad":
 					server.iwad = getIwad(Functions.cleanInputFile(m.group(2)));
 					break;
+				case "map":
+					server.map = m.group(2);
+					break;
 				case "mapwad":
 					server.mapwads = addWads(m.group(2));
 					break;
@@ -364,23 +392,25 @@ public class Server {
 					if (Functions.checkValidPort(m.group(2)))
 						server.temp_port = Integer.valueOf(m.group(2));
 					else {
-						if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "You did not input a valid port.");
+						server.bot.sendMessage(channel, "You did not input a valid port.");
 						return null;
 					}
 					if (server.checkPortExists(botReference, server.temp_port)) {
-						if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Port " + server.temp_port + " is already in use.");
+						server.bot.sendMessage(channel, "Port " + server.temp_port + " is already in use.");
 						return null;
 					}
 					break;
 				case "skill":
 					server.skill = handleSkill(m.group(2));
 					if (server.skill == -1) {
-						if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Skill must be between 0-4");
+						server.bot.sendMessage(channel, "Skill must be between 0-4");
 						return null;
 					}
 					break;
 				case "wad":
 				case "file":
+				case "wads":
+				case "files":
 					String[] wadArray = addWads(m.group(2));
 					if (wadArray.length > 0) {
 						for (String wad : wadArray)
@@ -393,6 +423,10 @@ public class Server {
 				case "optwad":
 				case "opt":
 				case "optfile":
+				case "optionalwads":
+				case "optwads":
+				case "opts":
+				case "optfiles":
 					String[] wadArray2 = addWads(m.group(2));
 					if (wadArray2.length > 0) {
 						for (String wad : wadArray2)
@@ -410,7 +444,7 @@ public class Server {
 				if (server.wads.get(i).startsWith("iwad:")) {
 					String tempWad = server.wads.get(i).split(":")[1];
 					if (!Functions.fileExists(server.bot.cfg_data.bot_iwad_directory_path + tempWad)) {
-						if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "File (iwad) '" + tempWad + "' does not exist!");
+						server.bot.sendMessage(channel, "File (iwad) '" + tempWad + "' does not exist!");
 						return null;
 					}
 					// Replace iwad: since we don't need it
@@ -418,7 +452,7 @@ public class Server {
 						server.wads.set(i, tempWad);
 				}
 				else if (!Functions.fileExists(server.bot.cfg_data.bot_wad_directory_path + server.wads.get(i))) {
-					if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "File '" + server.wads.get(i) + "' does not exist!");
+					server.bot.sendMessage(channel, "File '" + server.wads.get(i) + "' does not exist!");
 					return null;
 				}
 			}
@@ -428,7 +462,7 @@ public class Server {
 		if (server.optwads != null) {
 			for (int i = 0; i < server.optwads.size(); i++) {
 				if (!Functions.fileExists(server.bot.cfg_data.bot_wad_directory_path + server.optwads.get(i))) {
-					if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "File '" + server.optwads.get(i) + "' does not exist!");
+					server.bot.sendMessage(channel, "File '" + server.optwads.get(i) + "' does not exist!");
 					return null;
 				}
 			}
@@ -436,21 +470,24 @@ public class Server {
 
 		// Now that we've indexed the string, check to see if we have what we need to start a server
 		if (server.iwad == null) {
-			if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "You are missing an iwad, or have specified an incorrect iwad. You can add it by appending: iwad=your_iwad");
+			server.bot.sendMessage(channel, "You are missing an iwad, or have specified an incorrect iwad. You can add it by appending: iwad=your_iwad");
 			return null;
 		}
 		if (server.gamemode == null) {
-			if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "You are missing the gamemode, or have specified an incorrect gamemode. You can add it by appending: gamemode=your_gamemode");
-			return null;
+	//		server.bot.sendMessage(channel, "You are missing the gamemode, or have specified an incorrect gamemode. You can add it by appending: gamemode=your_gamemode");
+	//		return null;
+			server.gamemode = "cooperative";
 		}
 		if (server.servername == null) {
-			if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "You are missing the hostname, or your hostname syntax is wrong. You can add it by appending: hostname=\"Your Server Name\"");
+			server.bot.sendMessage(channel, "You are missing the hostname, or your hostname syntax is wrong. You can add it by appending: hostname=\"Your Server Name\"");
 			return null;
+	//		if (server.wads.get(0) != null) { server.servername = server.iwad.replace(".wad","").replace(".pk3","").replace(".pk7","")+" "+server.gamemode+" with "+Functions.implode(server.wads, ", ").replace(".wad","").replace(".pk3","").replace(".pk7","")+" hosted by "+server.irc_hostname; }
+	//		else { server.servername = server.iwad.replace(".wad","").replace(".pk3","").replace(".pk7","")+" "+server.gamemode+" hosted by "+server.irc_hostname; }
 		}
 
 		// Check if the global server limit has been reached
-		if (Functions.getFirstAvailablePort(server.bot.getMinPort(), server.bot.getMaxPort()) == 0) {
-			if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Global server limit has been reached.");
+		if (!recovering && Functions.getFirstAvailablePort(server.bot.getMinPort(), server.bot.getMaxPort()) == 0) {
+			server.bot.sendMessage(channel, "Global server limit has been reached.");
 			return null;
 		}
 
@@ -462,12 +499,23 @@ public class Server {
 				server.server_id = Functions.generateHash();
 			} catch (NoSuchAlgorithmException e) {
 				logMessage(LOGLEVEL_CRITICAL, "Error generating MD5 hash!");
-				if (!server.bot.recovering) server.bot.sendMessage(server.bot.cfg_data.irc_channel, "Error generating MD5 hash. Please contact an administrator.");
+				server.bot.sendMessage(channel, "Error generating MD5 hash. Please contact an administrator.");
 				return null;
 			}
 		}
-
+		{
+			final int mid = server.server_id.length() / 2;
+			server.rcon_password = server.server_id.substring(0, mid);
+			server.server_password = server.server_id.substring(mid);
+		}
+		
+		// Warn if using Strife Cooperative
+		if (server.iwad == "strife1.wad" && (server.gamemode == "cooperative" || server.gamemode == "survival" || server.gamemode == null)) {
+			server.bot.sendMessage(channel, "Note: Strife Cooperative is not fully supported by Zandronum");
+		}
+					
 		// Assign and start a new thread
+		server.recovering = recovering;
 		server.serverprocess = new ServerProcess(server);
 		server.serverprocess.start();
 		MySQL.logServer(server.servername, server.server_id, Functions.getUserName(server.irc_hostname));
@@ -483,6 +531,7 @@ public class Server {
 	 * information.
 	 * @param bot The calling bot reference.
 	 */
+	/* UNUSED
 	public void loadServers(Bot bot, ResultSet rs) {
 		// If something goes wrong...
 		if (rs == null) {
@@ -502,11 +551,11 @@ public class Server {
 					server.bot = bot;
 					server.buckshot = (rs.getInt("buckshot") == 1);
 					server.compatflags = rs.getInt("compatflags");
-					server.compatflags2 = rs.getInt("compatflags2");
+					server.zacompatflags = rs.getInt("zacompatflags");
 					server.config = rs.getString("config");
 					server.dmflags = rs.getInt("dmflags");
 					server.dmflags2 = rs.getInt("dmflags2");
-					server.dmflags3 = rs.getInt("dmflags3");
+					server.zadmflags = rs.getInt("zadmflags");
 					server.enable_skulltag_data = (rs.getInt("enable_skulltag_data") == 1);
 					server.gamemode = rs.getString("gamemode");
 					server.host_command = rs.getString("host_command");
@@ -536,7 +585,7 @@ public class Server {
 			e.printStackTrace();
 		}
 	}
-
+	*/
 	/**
 	 * Checks to see if the configuration file exists
 	 * @param config String - config name
@@ -607,6 +656,12 @@ public class Server {
 			case "megagame.wad":
 			case "freedm.wad":
 			case "nerve.wad":
+			case "fakeiwad.wad":
+			case "rott_tc_full.pk3":
+			case "doom_complete.pk3":
+			case "action2.wad":
+                        case "freedoom1.wad":
+                        case "freedoom2.wad":
 				return true;
 			default:
 				return false;
@@ -664,9 +719,33 @@ public class Server {
 			case "freedm":
 			case "freedm.wad":
 				return "freedm.wad";
+			case "freedoom":
+                        case "freedoom.wad":
+                        case "freedoom2":
+                        case "freedoom2.wad":
+				return "freedoom2.wad";
+                        case "freedoom1":
+                        case "freedoom1.wad":
+				return "freedoom1.wad";
 			case "nerve":
 			case "nerve.wad":
 				return "nerve.wad";
+			case "fakeiwad":
+			case "fakeiwad.wad":
+				return "fakeiwad.wad";
+			case "rott":
+			case "rotttc":
+			case "rotttcfull":
+			case "rott_tc":
+			case "rott_tc_full":
+			case "rott_tc_full.pk3":
+				return "rott_tc_full.pk3";
+			case "doom_complete":
+			case "doom_complete.pk3":
+				return "doom_complete.pk3";
+			case "action2":
+			case "action2.wad":
+				return "action2.wad";
 		}
 		// If there's no match...
 		return null;
@@ -686,16 +765,20 @@ public class Server {
 			case "ffa":
 				return "deathmatch";
 			case "ctf":
+			case "capturetheflag":
 				return "ctf";
 			case "tdm":
 			case "teamdm":
 			case "tdeathmatch":
 			case "teamdeathmatch":
 				return "teamplay";
+			case "term":
 			case "terminator":
 				return "terminator";
+			case "pos":
 			case "possession":
 				return "possession";
+			case "tpos":
 			case "teampossession":
 				return "teampossession";
 			case "lms":
@@ -706,12 +789,14 @@ public class Server {
 			case "teamlastmanstanding":
 				return "teamlms";
 			case "skulltag":
+			case "st":
 				return "skulltag";
 			case "duel":
 				return "duel";
 			case "teamgame":
 				return "teamgame";
 			case "domination":
+			case "dom":
 				return "domination";
 			case "coop":
 			case "co-op":
@@ -719,17 +804,15 @@ public class Server {
 				return "cooperative";
 			case "survival":
 				return "survival";
+			case "inv":
 			case "invasion":
 				return "invasion";
+			case "ofctf":
 			case "oneflagctf":
 				return "oneflagctf"; // NEEDS SUPPORT (please check)
-			//case null:
-				//return null;
 		}
 
-		// If the gametype is unknown, return null
-		// return null;
-		// Actually, return cooperative [DA]
+		// If the gametype is unknown, return cooperative
 		return "cooperative";
 	}
 
@@ -781,9 +864,8 @@ public class Server {
 				return "buckshot: " + Boolean.toString(this.buckshot);
 			case "compatflags":
 				return "compatflags: " + Integer.toString(this.compatflags);
-			case "compatflags2":
 			case "zacompatflags":
-				return "compatflags2: " + Integer.toString(this.compatflags2);
+				return "zacompatflags: " + Integer.toString(this.zacompatflags);
 			case "config":
 			case "cfg":
 			case "configuration":
@@ -798,12 +880,12 @@ public class Server {
 				return "dmflags: " + Integer.toString(this.dmflags);
 			case "dmflags2":
 				return "dmflags2 " + Integer.toString(this.dmflags2);
-			case "dmflags3":
 			case "zadmflags":
-				return "dmflags3 " + Integer.toString(this.dmflags3);
+				return "zadmflags " + Integer.toString(this.zadmflags);
 			case "gamemode":
 			case "gametype":
 				return "gamemode " + this.gamemode;
+			case ".host":
 			case "host":
 			case "hostcommand":
 			case "host_command":
