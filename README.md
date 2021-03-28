@@ -21,35 +21,28 @@ with managing and setting up servers.
 
 ##Building BestBot
 
-###With Ant
+###With Gradle
 
-**You need JDK 7 to compile BestBot**
+**You need JDK 11 to compile BestBot**
 
 1. cd to the working directory
-2. type `ant build`
+2. type `./gradlew installDist` (or assembleDist to produce archived versions)
 3. the bot should now be compiled!
 
 ##Configuration & Running
 
-**You need JRE 1.7 to run BestBot**
+**You need JRE 11 to run BestBot**
 
 1. Edit bestbot.ini and fill in your desired settings 
 2. Run the bot with `java -jar BestBot.jar bestbot.ini`
 
-##Libraries
-	
-* pircbot: http://www.jibble.org/pircbot.php
-* MySQL: http://dev.mysql.com/downloads/connector/j/
-* ini4j: http://ini4j.sourceforge.net/index.html
-* jBCrypt: http://www.mindrot.org/projects/jBCrypt/
-
 ##Copyright
 
 Copyright 2013 Best. Ever.
+Copyright 2021 TarCV
 
 Licensed under the GNU General Public License, Version 2.0 (the "License"); you may not use this work except in compliance with the License. You may obtain a copy of the License in the LICENSE file, or at:
 
 http://www.gnu.org/licenses/gpl-2.0.html
 
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied. See the License for the specific language governing permissions and limitations under the License.
-# tspgbotv2
