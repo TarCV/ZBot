@@ -1,5 +1,6 @@
 // --------------------------------------------------------------------------
 // Copyright (C) 2012-2013 Best-Ever
+// Copyright (C) 2021 TarCV
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -296,18 +297,18 @@ public class ConfigData {
 		ini.load(new FileReader(configFile));
 
 		// Load the IRC section
-		Profile.Section irc = ini.get("irc");
-		this.irc_channel = irc.get("channel");
-		this.irc_name = irc.get("name");
-		this.irc_user = irc.get("user");
-		this.irc_version = irc.get("version");
-		this.irc_network = irc.get("network");
-		this.irc_pass = irc.get("pass");
-		this.irc_port = Integer.parseInt(irc.get("port"));
-		this.irc_mask = irc.get("hostmask");
-        this.log_channel = irc.get("logchannel");
-		if (irc.get("irc_relay") != null)
-			this.irc_relay = Boolean.parseBoolean(irc.get("irc_relay"));
+		Profile.Section discord = ini.get("discord");
+		this.irc_channel = discord.get("channel");
+		this.irc_name = discord.get("name");
+		this.irc_user = discord.get("user");
+		this.irc_version = discord.get("version");
+		this.irc_network = discord.get("network");
+		this.irc_pass = discord.get("pass");
+		this.irc_port = Integer.parseInt(discord.get("port"));
+		this.irc_mask = discord.get("hostmask");
+        this.log_channel = discord.get("logchannel");
+		if (discord.get("irc_relay") != null)
+			this.irc_relay = Boolean.parseBoolean(discord.get("irc_relay"));
 
 		// Load the MYSQL section
 		Profile.Section mysql = ini.get("mysql");

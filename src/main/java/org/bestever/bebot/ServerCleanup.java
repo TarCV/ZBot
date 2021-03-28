@@ -1,5 +1,6 @@
 // --------------------------------------------------------------------------
 // Copyright (C) 2012-2013 Best-Ever
+// Copyright (C) 2021 TarCV
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -52,7 +53,7 @@ public class ServerCleanup extends TimerTask {
 		}
 		// Send a message to the channel if we've killed a server like this
 		if (killed > 0) {
-			bot.sendMessage(bot.cfg_data.irc_channel, Functions.pluralize("Killed " + killed + " inactive server{s} (inactive for " + bot.cfg_data.cleanup_interval + " days.", killed));
+			bot.sendMessageToCoreChannel(Functions.pluralize("Killed " + killed + " inactive server{s} (inactive for " + bot.cfg_data.cleanup_interval + " days.", killed));
 		}
 	}
 }

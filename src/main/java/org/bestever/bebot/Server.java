@@ -1,5 +1,6 @@
 // --------------------------------------------------------------------------
 // Copyright (C) 2012-2013 Best-Ever
+// Copyright (C) 2021 TarCV
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -14,6 +15,8 @@
 // --------------------------------------------------------------------------
 
 package org.bestever.bebot;
+
+import com.mewna.catnip.entity.channel.MessageChannel;
 
 import java.io.File;
 import java.io.PrintWriter;
@@ -103,12 +106,12 @@ public class Server {
 	/**
 	 * The channel it was hosted from
 	 */
-	public String irc_channel;
+	public MessageChannel channel;
 
 	/**
 	 * This is the host's hostname on irc
 	 */
-	public String irc_hostname;
+	public String userId;
 	public String alt_hostname;
 
 	/**
@@ -124,7 +127,7 @@ public class Server {
 	/**
 	 * Contains the level of the user
 	 */
-	public int user_level;
+	public AccountType user_level;
 
 	/**
 	 * The type of executable (do we run normal zandronum, or kpatch, or devrepo...etc)
@@ -264,8 +267,9 @@ public class Server {
 	 * @param channel The channel it was sent from
 	 * @param hostname The hostname of the sender
 	 * @param message The message sent
+	 * @param userLevel
 	 */
-	public static Server handleHostCommand(Bot botReference, LinkedList<Server> servers, String channel, String sender, String hostname, String message, int userLevel, boolean autoRestart, int port, String id, boolean recovering) {
+	public static Server handleHostCommand(Bot botReference, LinkedList<Server> servers, MessageChannel channel, String userId, String message, AccountType userLevel, boolean autoRestart, int port, String id, boolean recovering) {
 //		try { Thread.sleep(100); } catch (InterruptedException e) { e.printStackTrace(); }
 	
 		// Initialize server without linking it to the ArrayList
@@ -285,11 +289,10 @@ public class Server {
 		server.temp_port = port;
 
 		// Input basic values
-		server.irc_channel = channel;
-		server.irc_hostname = hostname;
+		server.channel = channel;
+		server.userId = userId;
 		server.host_command = message;
 		server.user_level = userLevel;
-		server.sender = sender;
 
 		// The bot structure of using the executable has changed, we will set
 		// it to default here at the very beginning to the normal exe, but it
@@ -515,7 +518,7 @@ public class Server {
 		server.recovering = recovering;
 		server.serverprocess = new ServerProcess(server);
 		server.serverprocess.start();
-		MySQL.logServer(server.servername, server.server_id, Functions.getUserName(server.irc_hostname));
+		MySQL.logServer(server.servername, server.server_id, server.userId);
 		
 		return server;
 	}

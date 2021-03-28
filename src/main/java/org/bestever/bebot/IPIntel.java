@@ -6,13 +6,13 @@ package org.bestever.bebot;
 */
 
 
-import org.jibble.pircbot.Colors;
-
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+
+import static org.bestever.bebot.Bot.bold;
 
 /**
  * Created by Sean on 19/10/2016.
@@ -74,13 +74,13 @@ public class IPIntel implements Runnable {
 			}
 			MySQL.addKnownIP(ip);
 			if (response >= minResult) {
-				source.bot.sendLogErrorMessage(Colors.BOLD+name+Colors.BOLD+" with ip "+Colors.BOLD+ip+Colors.BOLD+" was kicked from " + Colors.BOLD+source.sender+Colors.BOLD + "'s server "+ Colors.BOLD+source.servername+Colors.BOLD +" on port "+Colors.BOLD+source.port+Colors.BOLD+" as they're suspected of being behind a proxy");
+				source.bot.sendLogErrorMessage(bold(name)+" with ip "+bold(ip)+" was kicked from " + bold(source.sender) + "'s server "+ bold(source.servername) +" on port "+bold(source.port)+" as they're suspected of being behind a proxy");
 				source.in.println("addban " + ip + " 10minute " + "\"\\ciBanned from all " + source.bot.cfg_data.service_short + " servers on suspicion of using a proxy.\"");
 				if (MySQL.addBan(ip, "Proxy (IPIntel)", source.bot.cfg_data.irc_name)) {
-					source.bot.sendLogInfoMessage("Proxy IP " + Colors.BOLD+ip+Colors.BOLD + " was added to the banlist");
+					source.bot.sendLogInfoMessage("Proxy IP " + bold(ip) + " was added to the banlist");
 				}
 				else { 
-					source.bot.sendLogErrorMessage("Proxy IP " + Colors.BOLD+ip+Colors.BOLD + " could not be added to the banlist");
+					source.bot.sendLogErrorMessage("Proxy IP " + bold(ip) + " could not be added to the banlist");
 				}
 			}
 		} catch (Exception e) {

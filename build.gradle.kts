@@ -4,10 +4,11 @@ plugins {
 
 repositories {
     mavenCentral()
+    maven { url = uri("https://jitpack.io") }
 }
 
 dependencies {
-    implementation("pircbot:pircbot:1.5.0")
+    implementation("com.mewna:catnip:3.0.0")
     implementation("mysql:mysql-connector-java:5.0.8")
     implementation("org.ini4j:ini4j:0.5.2")
     implementation("javax.json:javax.json-api:1.1.4")

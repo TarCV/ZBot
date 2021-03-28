@@ -1,5 +1,6 @@
 // --------------------------------------------------------------------------
 // Copyright (C) 2012-2013 Best-Ever & The Sentinel's Playground
+// Copyright (C) 2021 TarCV
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -15,11 +16,24 @@
 
 package org.bestever.bebot;
 
+import com.mewna.catnip.Catnip;
+import com.mewna.catnip.CatnipOptions;
+import com.mewna.catnip.entity.channel.GuildChannel;
+import com.mewna.catnip.entity.channel.MessageChannel;
+import com.mewna.catnip.entity.guild.Guild;
+import com.mewna.catnip.entity.guild.Member;
+import com.mewna.catnip.entity.guild.Role;
+import com.mewna.catnip.entity.guild.UnavailableGuild;
+import com.mewna.catnip.entity.message.Message;
+import com.mewna.catnip.entity.misc.Ready;
+import com.mewna.catnip.entity.partials.HasName;
+import com.mewna.catnip.entity.user.User;
+import com.mewna.catnip.shard.DiscordEvent;
+import com.mewna.catnip.shard.GatewayIntent;
 import org.bestever.serverquery.QueryManager;
-import org.jibble.pircbot.Colors;
-import org.jibble.pircbot.IrcException;
-import org.jibble.pircbot.PircBot;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -28,15 +42,21 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.Timer;
 
 import static org.bestever.bebot.AccountType.ADMIN;
 import static org.bestever.bebot.AccountType.MODERATOR;
 import static org.bestever.bebot.AccountType.REGISTERED;
+import static org.bestever.bebot.AccountType.VIP;
 import static org.bestever.bebot.AccountType.isAccountTypeOf;
 import static org.bestever.bebot.Logger.LOGLEVEL_CRITICAL;
 import static org.bestever.bebot.Logger.LOGLEVEL_DEBUG;
@@ -48,7 +68,9 @@ import static org.bestever.bebot.Logger.logMessage;
 /**
  * This is where the bot methods are run and handling of channel/PM input are processed
  */
-public class Bot extends PircBot {
+public class Bot {
+
+	private final Catnip catnip;
 
 	/**
 	 * Path to the configuration file relative to the bot
@@ -110,23 +132,18 @@ public class Bot extends PircBot {
 	 */
 	private long terminateTimestamp = System.currentTimeMillis();
 
-	// Debugging purposes only
-	public static Bot staticBot;
+	private Boolean debugMode = true;
 
-	private Boolean debugMode = false;
+	public final VersionParser versionParser;
 
-	public VersionParser versionParser;
-	
-	public boolean recovering = false;
-	
 	public boolean hasStarted = false;
+
+	private String guildId;
 
 	/**
 	 * Set the bot up with the constructor
 	 */
 	public Bot(ConfigData cfgfile) {
-		staticBot = this; // DEBUG ONLY
-
 		// Point our config data to what we created back in RunMe.java
 		cfg_data = cfgfile;
 
@@ -136,21 +153,6 @@ public class Bot extends PircBot {
 		// Parse versions.json
 		versionParser = new VersionParser(cfg_data.bot_versionsfile, this);
 
-		// Set up the bot and join the channel
-		logMessage(LOGLEVEL_IMPORTANT, "Initializing BestBot v" + cfg_data.irc_version);
-		setVerbose(cfg_data.bot_verbose);
-		setName(cfg_data.irc_name);
-		setLogin(cfg_data.irc_user);
-		setVersion(cfg_data.irc_version);
-		try {
-			connect(cfg_data.irc_network, cfg_data.irc_port, cfg_data.irc_pass);
-		} catch (IOException | IrcException e) {
-			logMessage(LOGLEVEL_CRITICAL, "Exception occurred while connecting to the network, terminating bot!");
-			disconnect();
-			System.exit(0);
-			e.printStackTrace();
-		}
-
 		// Set initial ports
 		this.min_port = cfg_data.bot_min_port;
 		this.max_port = cfg_data.bot_max_port;
@@ -158,12 +160,12 @@ public class Bot extends PircBot {
 		// Set up the notice timer (if set)
 		if (cfg_data.bot_notice != null) {
 			timer = new Timer();
-			timer.scheduleAtFixedRate(new NoticeTimer(this), 1000, cfg_data.bot_notice_interval * 1000);
+			timer.scheduleAtFixedRate(new NoticeTimer(this), 1000, cfg_data.bot_notice_interval * 1000L);
 		}
 
 		// Set up the server arrays
 		this.servers = new LinkedList<>();
-		this.vSHashmap = new HashMap<String, LinkedList<Server>>();
+		this.vSHashmap = new HashMap<>();
 		for (Version v : versionParser.list)
 			this.vSHashmap.put(v.name, new LinkedList<Server>());
 
@@ -176,37 +178,61 @@ public class Bot extends PircBot {
 		// Begin a server query thread that will run
 		queryManager = new QueryManager(this);
 		queryManager.start();
+
+		// Set up the bot and join the channel
+		logMessage(LOGLEVEL_IMPORTANT, "Initializing ZBot v" + cfg_data.irc_version);
+
+		final CatnipOptions options = new CatnipOptions(cfg_data.irc_pass);
+		{
+			final HashSet<GatewayIntent> gatewayIntents = new HashSet<>();
+			gatewayIntents.addAll(GatewayIntent.UNPRIVILEGED_INTENTS);
+			gatewayIntents.add(GatewayIntent.GUILD_PRESENCES);
+			options.intents(gatewayIntents);
+		}
+
+		catnip = Catnip.catnip(options);
+		catnip
+				.observable(DiscordEvent.READY)
+				.subscribe(
+						this::onConnect,
+						error -> {
+							logMessage(LOGLEVEL_CRITICAL, "Exception occurred while connecting to the network, terminating bot!");
+							System.exit(0);
+							error.printStackTrace();
+						}
+				);
+
+		catnip
+				.observable(DiscordEvent.MESSAGE_CREATE)
+				.subscribe(this::onMessage);
+
+		catnip.connect();
 	}
 
 	/**
 	 * Called when the bot connects to the irc server
+	 * @param ready
 	 */
-	@Override
-	public void onConnect() {
+	public void onConnect(Ready readyMsg) {
 		// Set up MySQL (Just in case it didn't before it connected)
 		 MySQL.setMySQL(this, cfg_data.mysql_host, cfg_data.mysql_user, cfg_data.mysql_pass, cfg_data.mysql_port, cfg_data.mysql_db);
-		 
-		this.joinChannel(cfg_data.irc_channel);
-		this.joinChannel(cfg_data.log_channel);
-		
-		setMessageDelay(500);
-		
-		sendMessage(cfg_data.irc_channel, "Hello, world!");
+
+		final Set<UnavailableGuild> guilds = readyMsg.guilds();
+		if (guilds.size() != 1) {
+			throw new  IllegalStateException("Exactly one guild should be available, got " + guilds);
+		}
+		this.guildId = guilds.iterator().next().id();
+
+		sendMessageToCoreChannel("Hello, world!");
 		sendLogInfoMessage("Bot started.");
-		
+
+
 		if (!hasStarted && MySQL.shouldRecover()) {
-			sendMessage(cfg_data.irc_channel, "Recovering Servers, Please Wait!");
-			sendMessage(cfg_data.irc_channel, "Note: All server passwords will be reset to defaults.");
+			sendMessageToCoreChannel("Recovering Servers, Please Wait!");
+			sendMessageToCoreChannel("Note: All server passwords will be reset to defaults.");
 			MySQL.doRecovery();
 		}
 		hasStarted = true;
-	}
-
-	/**
-	 * Attemps to rejoin the channel
-	 */
-	public void rejoinChannel() {
-		this.joinChannel(cfg_data.irc_channel);
 	}
 
 	/**
@@ -239,37 +265,47 @@ public class Bot extends PircBot {
 	/**
 	 * Adds a wad to the automatic server startup
 	 * @param wad String - the name of the wad
+	 * @param sender
 	 */
-	public void addExtraWad(String wad, String sender) {
+	public void addExtraWad(String wad, Member sender, MessageChannel channel) {
 		if (!Functions.fileExists(cfg_data.bot_wad_directory_path + wad)) {
-			sendMessage(sender, "Error: file " + wad + " does not exist!");
+			channel.sendMessage("Error: file " + wad + " does not exist!");
 			return;
 		}
 		for (String listWad : cfg_data.bot_extra_wads) {
 			if (listWad.equalsIgnoreCase(wad)) {
-				sendMessage(sender, "Error: file " + listWad + " is already in the startup list!");
+				channel.sendMessage("Error: file " + listWad + " is already in the startup list!");
 				return;
 			}
 		}
 		cfg_data.bot_extra_wads.add(wad);
-		sendMessage(sender, "Added " + wad + " to the startup list!");
-		sendLogModeratorMessage(Colors.BOLD + sender + Colors.BOLD + " adds " + Colors.BOLD + wad + Colors.BOLD + " to the startup WAD list");
+		channel.sendMessage("Added " + wad + " to the startup list!");
+		sendLogModeratorMessage(bold(userInfo(sender)) + " adds " + bold(wad) + " to the startup WAD list");
+	}
+
+	public static String bold(String message) {
+		return "**" + message + "**";
+	}
+
+	public static String bold(Number message) {
+		return "**" + message + "**";
 	}
 
 	/**
 	 * Removes a wad from the wad startup list
 	 * @param wad String - name of the wad
+	 * @param sender
 	 */
-	public void deleteExtraWad(String wad, String sender) {
+	public void deleteExtraWad(String wad, Member sender, MessageChannel channel) {
 		for (String listWad : cfg_data.bot_extra_wads) {
 			if (listWad.equalsIgnoreCase(wad)) {
 				cfg_data.bot_extra_wads.remove(wad);
-				sendMessage(sender, "Removed " + wad + " from the startup list!");
-				sendLogModeratorMessage(Colors.BOLD + sender + Colors.BOLD + " removes " + Colors.BOLD + wad + Colors.BOLD + " from the startup WAD list");
+				channel.sendMessage("Removed " + wad + " from the startup list!");
+				sendLogModeratorMessage(bold(userInfo(sender)) + " removes " + bold(wad) + " from the startup WAD list");
 				return;
 			}
 		}
-		sendMessage(sender, "Error: file " + wad + " was not found in the startup list!");
+		channel.sendMessage("Error: file " + wad + " was not found in the startup list!");
 	}
 
 	/**
@@ -311,19 +347,20 @@ public class Bot extends PircBot {
 
 	/**
 	 * Returns a list of servers belonging to the specified user
-	 * @param username their IRC username
+	 * @param userId their IRC username
 	 * @return a list of server objects
 	 */
-	public List<Server> getUserServers(String username) {
-		logMessage(LOGLEVEL_DEBUG, "Getting all servers from " + username + ".");
+	@Nonnull
+	public List<Server> getUserServers(String userId) {
+		logMessage(LOGLEVEL_DEBUG, "Getting all servers from " + userId + ".");
 		if (servers == null || servers.isEmpty())
-			return null;
+			return Collections.emptyList();
 		Server desiredServer;
 		ListIterator<Server> it = servers.listIterator();
 		List<Server> serverList = new ArrayList<>();
 		while (it.hasNext()) {
 			desiredServer = it.next();
-			if (Functions.getUserName(desiredServer.irc_hostname).equalsIgnoreCase(username)) {
+			if (desiredServer.userId.equals(userId)) {
 				serverList.add(desiredServer);
 			}
 		}
@@ -350,11 +387,11 @@ public class Bot extends PircBot {
 	 * removal from the linkedlist.
 	 * @param portString The port desired to kill
 	 */
-	private void killServer(String portString, String sender, String channel) {
+	private void killServer(String portString, Member sender, MessageChannel channel) {
 		logMessage(LOGLEVEL_NORMAL, "Killing server on port " + portString + ".");
 		// Ensure it is a valid port
 		if (!Functions.isNumeric(portString)) {
-			sendMessage(channel, "Invalid port number (" + portString + "), not terminating server.");
+			channel.sendMessage("Invalid port number (" + portString + "), not terminating server.");
 			return;
 		}
 
@@ -363,7 +400,7 @@ public class Bot extends PircBot {
 
 		// Handle users sending in a small value (thus saving time
 		if (port < min_port) {
-			sendMessage(channel, "Invalid port number (ports start at " + min_port + "), not terminating server.");
+			channel.sendMessage("Invalid port number (ports start at " + min_port + "), not terminating server.");
 			return;
 		}
 
@@ -372,11 +409,19 @@ public class Bot extends PircBot {
 		if (targetServer != null) {
 			targetServer.auto_restart = false;
 			String owner = targetServer.sender;
-			sendLogModeratorMessage(Colors.BOLD + sender + Colors.BOLD + " requests kill of " + Colors.BOLD + owner + Colors.BOLD + "'s server on port "+ Colors.BOLD + portString + Colors.BOLD);
+			sendLogModeratorMessage(bold(userInfo(sender)) + " requests kill of " + bold(owner) + "'s server on port "+ bold(portString));
 			targetServer.killServer();
 		}
 		else
-			sendMessage(channel, "Error: Could not find a server with the port " + port + "!");
+			channel.sendMessage("Error: Could not find a server with the port " + port + "!");
+	}
+
+	private static String userInfo(@Nullable Member sender) {
+		if (sender == null) {
+			return "<no member>";
+		} else {
+			return sender.nick() + "#" + sender.id();
+		}
 	}
 
 	/**
@@ -390,45 +435,47 @@ public class Bot extends PircBot {
 				Server s = getServer(Integer.parseInt(keywords[1]));
 				if (s.auto_restart) {
 					s.auto_restart = false;
-					sendMessage(channel, "Autorestart disabled on server.");
+					channel.sendMessage("Autorestart disabled on server.");
 				}
 				else {
 					s.auto_restart = true;
-					sendMessage(channel, "Autorestart set up on server.");
+					channel.sendMessage("Autorestart set up on server.");
 				}
 			}
 		}
 		else
-			sendMessage(channel, "Correct usage is .autorestart <port>");
+			channel.sendMessage("Correct usage is .autorestart <port>");
 	}
 */
 	/**
 	 * Toggles the protected server state on or off (protected servers are immune to killinactive)
 	 * @param keywords String[] - array of words in message sent
+	 * @param channel
 	 */
-	private void protectServer(String[] keywords, String channel) {
+	private void protectServer(String[] keywords, MessageChannel channel) {
 		if (keywords.length == 2) {
 			if (Functions.isNumeric(keywords[1])) {
 				Server s = getServer(Integer.parseInt(keywords[1]));
 				if (s.protected_server) {
 					s.protected_server = false;
-					sendMessage(channel, "Kill protection disabled.");
+					channel.sendMessage("Kill protection disabled.");
 				}
 				else {
 					s.protected_server = true;
-					sendMessage(channel, "Kill protection enabled.");
+					channel.sendMessage("Kill protection enabled.");
 				}
 			}
 		}
 		else
-			sendMessage(channel, "Correct usage is .protect <port>");
+			channel.sendMessage("Correct usage is .protect <port>");
 	}
 
 	/**
 	 * Sends a message to all servers
 	 * @param keywords String[] - array of words in message sent
+	 * @param sender
 	 */
-	private void globalBroadcast(String[] keywords, String sender, String channel) {
+	private void globalBroadcast(String[] keywords, Member sender, MessageChannel channel) {
 		if (keywords.length > 1) {
 			if (servers != null) {
 				String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
@@ -437,28 +484,29 @@ public class Bot extends PircBot {
 					s.in.flush(); s.in.println("say \"GLOBAL ANNOUNCEMENT: " + Functions.escapeQuotes(message) + "\";\n");
 					s.in.flush(); s.in.println("say \"\\cf--------------\\cc\";\n");
 				}
-				sendMessage(channel, "Global broadcast sent.");
-				sendLogModeratorMessage(Colors.BOLD + sender + Colors.BOLD + " sends global announcement: " + message);
+				channel.sendMessage("Global broadcast sent.");
+				sendLogModeratorMessage(bold(userInfo(sender)) + " sends global announcement: " + message);
 			}
 			else {
-				sendMessage(channel, "There are no servers running at the moment.");
+				channel.sendMessage("There are no servers running at the moment.");
 			}
 		}
 	}
 
 	/**
 	 * Sends a command to specified server
+	 * @param recipient String - who to return the message to (since this can be accessed via PM as well as channel)
 	 * @param level int - the user's level
 	 * @param keywords String[] - message
-	 * @param recipient String - who to return the message to (since this can be accessed via PM as well as channel)
+	 * @param hostname
 	 */
-	private void sendCommand(int level, String[] keywords, String hostname, String recipient, String sender) {
+	private void sendCommand(AccountType level, String[] keywords, Member hostname, MessageChannel channel) {
 		if (keywords.length > 2) {
 			if (Functions.isNumeric(keywords[1])) {
 				int port = Integer.parseInt(keywords[1]);
 				Server s = getServer(port);
 				if (s != null) {
-					boolean isHoster = Functions.getUserName(s.irc_hostname).equals(Functions.getUserName(hostname));
+					boolean isHoster = s.userId.equals(hostname.id());
 					if (isHoster || isAccountTypeOf(level, MODERATOR)) {
 						String entireMessage = Functions.implode(Arrays.copyOfRange(keywords, 2, keywords.length), " ");
 						String thisMessage = entireMessage.split(";")[0]; // Only send the first message because stacked messages break somehow.. :/
@@ -474,35 +522,36 @@ public class Bot extends PircBot {
 							args = "\""+args+"\"";
 						}
 						{
-							s.in.flush(); s.in.println("echo \"-> " + command + " " + Functions.escapeQuotes(args) + " (RCON by " + sender + " - " + cfg_data.irc_name + ")\";\n");
+							s.in.flush(); s.in.println("echo \"-> " + command + " " + Functions.escapeQuotes(args) + " (RCON by " + hostname + " - " + cfg_data.irc_name + ")\";\n");
 							s.in.flush(); s.in.println(command + " " + args + ";\n");
 						}
-						sendMessage(recipient, "Command '"+thisMessage+"' sent.");
-						String logSender = (isHoster ? "their own" : Colors.BOLD + Functions.getUserName(s.irc_hostname) + Colors.BOLD + "'s");
-						String logStr = Colors.BOLD + sender + Colors.BOLD + " sends to " + logSender + " server on port " + port + ": " + thisMessage;
+						channel.sendMessage("Command '"+thisMessage+"' sent.");
+						String logSender = (isHoster ? "their own" : bold(s.userId) + "'s");
+						String logStr = bold(userInfo(hostname)) + " sends to " + logSender + " server on port " + port + ": " + thisMessage;
 						if (isHoster)
 							sendLogUserMessage(logStr);
 						else
 							sendLogModeratorMessage(logStr);
 					}
 					else
-						sendMessage(recipient, "You do not own this server.");
+						channel.sendMessage("You do not own this server.");
 				}
 				else
-					sendMessage(recipient, "Server does not exist.");
+					channel.sendMessage("Server does not exist.");
 			}
 			else
-				sendMessage(recipient, "Port must be a number!");
+				channel.sendMessage("Port must be a number!");
 		}
 		else
-			sendMessage(recipient, "Incorrect syntax! Correct syntax is .send <port> <command>");
+			channel.sendMessage("Incorrect syntax! Correct syntax is .send <port> <command>");
 	}
 	
 	/**
 	 * Sends a command to all servers
 	 * @param keywords String[] - array of words in message sent
+	 * @param sender
 	 */
-	private void sendCommandAll(String[] keywords, String sender, String channel) {
+	private void sendCommandAll(String[] keywords, Member sender, MessageChannel channel) {
 		if (keywords.length > 1) {
 			if (servers != null) {
 				String entireMessage = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
@@ -512,7 +561,7 @@ public class Bot extends PircBot {
 				String command = thisKeywords[0];
 				String args = Functions.implode(Arrays.copyOfRange(thisKeywords, 1, thisKeywords.length), " ");
 				if (!args.equals("") && (command.equalsIgnoreCase("sv_hostname") || command.equalsIgnoreCase("sv_website") || command.equalsIgnoreCase("logfile"))) {
-					sendMessage(channel, "Error: Command " + command + " is not allowed to be sent to all servers");
+					channel.sendMessage("Error: Command " + command + " is not allowed to be sent to all servers");
 				}
 				else {
 					if (!args.equals("") && (command.equalsIgnoreCase("sv_hostname") || command.equalsIgnoreCase("echo") || command.equalsIgnoreCase("say"))) {
@@ -523,12 +572,12 @@ public class Bot extends PircBot {
 						s.in.flush(); s.in.println("echo \"-> " + command + " " + Functions.escapeQuotes(args) + " (RCON by " + sender + " - " + cfg_data.irc_name + ")\";\n");
 						s.in.flush(); s.in.println(command + " " + args + ";\n");
 					}
-					sendMessage(channel, "Command '"+thisMessage+"' sent to all servers.");
-					sendLogModeratorMessage(Colors.BOLD + sender + Colors.BOLD + " sends to all servers: " + thisMessage);
+					channel.sendMessage("Command '"+thisMessage+"' sent to all servers.");
+					sendLogModeratorMessage(bold(userInfo(sender)) + " sends to all servers: " + thisMessage);
 				}
 			}
 			else {
-				sendMessage(channel, "There are no servers running at the moment.");
+				channel.sendMessage("There are no servers running at the moment.");
 			}
 		}
 	}
@@ -536,27 +585,28 @@ public class Bot extends PircBot {
 	/**
 	 * Have the bot handle message events
 	 */
-	@Override
-	public void onMessage(String channel, String sender, String login, String hostname, String message) {
+	public void onMessage(Message msg) {
+		final Member member = msg.member();
+		final String message = msg.content();
+
+		final MessageChannel channel = msg.channel().blockingGet();
+		assert channel != null;
+
+		if (channel.isDM()) {
+			onPrivateMessage(msg);
+			return;
+		}
+
 		// Perform these only if the message starts with a period (to save processing time on trivial chat)
 		if (message.startsWith(".")) {
 			// Generate an array of keywords from the message
 			String[] keywords = message.split(" ");
 
-			// Use soon!
-			// String username = Functions.getUserName(hostname);
-
-			// Support custom hostnames
-			if (!Functions.checkLoggedIn(hostname))
-				if (!MySQL.getUsername(hostname).equals("None"))
-					hostname = MySQL.getUsername(hostname);
-			hostname = hostname.replace(".users.zandronum.com","");
-
 			// Perform function based on input (note: login is handled by the MySQL function/class); also mostly in alphabetical order for convenience
-			int userLevel = MySQL.getLevel(hostname);
+			final AccountType userLevel = getRole(member);
 			switch (keywords[0].toLowerCase()) {
 				case ".commands":
-					sendMessage(channel, processCommands(userLevel));
+					channel.sendMessage(processCommands(userLevel));
 					break;
 				case ".file":
 					processFile(keywords, channel);
@@ -565,10 +615,7 @@ public class Bot extends PircBot {
 					processGet(keywords, channel);
 					break;
 				case ".help":
-					if (cfg_data.bot_help != null)
-						sendMessage(channel, cfg_data.bot_help);
-					else
-						sendMessage(channel, "Error: No help available.");
+					channel.sendMessage(Objects.requireNonNullElse(cfg_data.bot_help, "Error: No help available."));
 					break;
 				case ".owner":
 					processOwner(keywords, channel);
@@ -578,63 +625,59 @@ public class Bot extends PircBot {
 					break;
 				case ".uptime":
 					if (keywords.length == 1)
-						sendMessage(channel, "I have been running for " + Functions.calculateTime(System.currentTimeMillis() - time_started));
+						channel.sendMessage("I have been running for " + Functions.calculateTime(System.currentTimeMillis() - time_started));
 					else
 						calculateUptime(keywords[1], channel);
 					break;
-				case ".whoami":
-					sendMessage(channel, getLoggedIn(hostname, userLevel));
-					break;
 				case ".liststartwads":
-					sendMessage(channel, "These wads are automatically loaded when a server is started: " + Functions.implode(cfg_data.bot_extra_wads, ", "));
+					channel.sendMessage("These wads are automatically loaded when a server is started: " + Functions.implode(cfg_data.bot_extra_wads, ", "));
 					break;
 				case ".versions":
 					for (Version v : versionParser.list)
-						sendMessage(channel, String.format("%s %s - %s", v.name, (v.isDefault ? "(default)" : ""), v.description));
+						channel.sendMessage(String.format("%s %s - %s", v.name, (v.isDefault ? "(default)" : ""), v.description));
 					break;
 				default:
 					break;
 			}
-			if (userLevel >= 1) { // REGISTERED
+			if (isAccountTypeOf(userLevel, REGISTERED)) {
 				switch (keywords[0].toLowerCase()) {
 					case ".getinfo":
-						processServerInfo(userLevel, keywords, sender, hostname);
+						processServerInfo(userLevel, keywords, channel, member);
 						break;
 					case ".host":
-						processHost(userLevel, channel, sender, hostname, message, false, getMinPort());
+						processHost(userLevel, channel, member.id(), message, getMinPort());
 						break;
 					case ".kill":
-						processKill(userLevel, keywords, hostname, sender, channel);
+						processKill(userLevel, keywords, member, channel, channel);
 						break;
 					case ".killmine":
-						processKillMine(hostname, sender, channel);
+						processKillMine(member, channel);
 						break;
 					case ".load":
-						MySQL.loadSlot(hostname, keywords, userLevel, channel, sender);
+						MySQL.loadSlot(member.id(), keywords, userLevel, channel);
 						break;
 					case ".save":
-						sendMessage(channel, "Please update slots at " + cfg_data.website_link + "/account");
+						channel.sendMessage("Please update slots at " + cfg_data.website_link + "/account");
 //						MySQL.saveSlot(hostname, keywords);
 						break;
 					case ".slot":
-						MySQL.showSlot(hostname, keywords, channel);
+						MySQL.showSlot(member.id(), keywords, channel);
 						break;
 //					case ".query":
 //						handleQuery(keywords);
 //						break;
 					case ".send":
-						sendCommand(userLevel, keywords, hostname, channel, sender);
+						sendCommand(userLevel, keywords, member, channel);
 						break;
 					case ".rcon":
 					case ".logfile":
 					case ".passwords":
-						sendMessage(channel, "Please use .getinfo <port> instead");
+						channel.sendMessage("Please use .getinfo <port> instead");
 						break;
 					default:
 						break;
 				}
-			}
-			else if (userLevel < 1) {
+			} else {
 				switch (keywords[0].toLowerCase()) {
 					case ".getinfo":
 					case ".host":
@@ -647,16 +690,13 @@ public class Bot extends PircBot {
 					case ".rcon":
 					case ".logfile":
 					case ".passwords":
-						if (userLevel == 0)
-							sendMessage(channel, "Error: You are banned from using this service");
-						else if (userLevel < 0)
-							sendMessage(channel, "Error: You are either not logged in with NickServ or your account is not registered with " + cfg_data.service_short + " - See " + cfg_data.website_link + "/register");
-						break;
+						channel.sendMessage("Sorry, I'm not allowed to speak to you");
 					default:
 						break;
 				}
 			}
-			if (userLevel >= 2) { // VIP
+
+			if (isAccountTypeOf(userLevel, VIP)) { // VIP
 				switch (keywords[0].toLowerCase()) {
 //					case ".autorestart":
 //						toggleAutoRestart(keywords, channel);
@@ -674,7 +714,7 @@ public class Bot extends PircBot {
 							BufferedReader in = new BufferedReader(new InputStreamReader(yc.getInputStream()));
 							String inputLine;
 							while ((inputLine = in.readLine()) != null) {
-								sendMessage(channel, inputLine);
+								channel.sendMessage(inputLine);
 							}
 							in.close();
 						}
@@ -696,7 +736,7 @@ public class Bot extends PircBot {
 							BufferedReader in = new BufferedReader(new InputStreamReader(yc.getInputStream()));
 							String inputLine;
 							while ((inputLine = in.readLine()) != null) {
-								sendMessage(channel, inputLine);
+								channel.sendMessage(inputLine);
 							}
 							in.close();
 						}
@@ -710,89 +750,89 @@ public class Bot extends PircBot {
 					default:
 						break;
 				}
-			}
-			else if (userLevel < 2) {
+			} else {
 				switch (keywords[0].toLowerCase()) {
 //					case ".autorestart":
 					case ".cpu":
 					case ".mem":
 					case ".protect":
-						sendMessage(channel, "Error: You do not have permission to use that command!");
+						channel.sendMessage("Error: You do not have permission to use that command!");
 						break;
 					default:
 						break;
 				}
 			}
-			if (userLevel >= 3) { // MODERATOR
+
+			if (isAccountTypeOf(userLevel, MODERATOR)) { // MODERATOR
 				switch (keywords[0].toLowerCase()) {
 					case ".broadcast":
-						globalBroadcast(keywords, sender, channel);
+						globalBroadcast(keywords, member, channel);
 						break;
 					case ".killinactive":
-						processKillInactive(keywords, sender, channel);
+						processKillInactive(keywords, member, channel);
 						break;
 					default:
 						break;
 				}
-			}
-			else if (userLevel < 3) {
+			} else {
 				switch (keywords[0].toLowerCase()) {
 					case ".broadcast":
 					case ".killinactive":
-						sendMessage(channel, "Error: You do not have permission to use that command!");
+						channel.sendMessage("Error: You do not have permission to use that command!");
 						break;
 					default:
 						break;
 				}
 			}
-			if (userLevel >= 4) { // ADMIN
+
+			if (isAccountTypeOf(userLevel, ADMIN)) {
 				switch (keywords[0].toLowerCase()) {
 					case ".killall":
-						processKillAll(sender, channel);
+						processKillAll(member, channel);
 						break;
 					case ".killversion":
-						processKillVersion(keywords, sender, channel);
+						processKillVersion(keywords, member, channel);
 						break;
 					case ".notice":
 						setNotice(keywords, userLevel, channel);
-						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " sets notice to " + Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
+						sendLogAdminMessage(bold(userInfo(member)) + " sets notice to " + Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
 						break;
 					case ".off":
-						processOff(sender, channel);
+						processOff(member, channel);
 						break;
 					case ".on":
-						processOn(sender, channel);
+						processOn(member, channel);
 						break;
 					case ".reloadconfig":
 						reloadConfigFile();
-						sendMessage(channel, "Configuration file has been successfully reloaded.");
-						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " reloaded the config file");
+						channel.sendMessage("Configuration file has been successfully reloaded.");
+						sendLogAdminMessage(bold(userInfo(member)) + " reloaded the config file");
 						break;
 					case ".reloadversions":
 						versionParser.load();
-						sendMessage(channel, "Versions file has been successfully reloaded.");
-						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " reloaded the zandronum versions");
+						channel.sendMessage("Versions file has been successfully reloaded.");
+						sendLogAdminMessage(bold(userInfo(member)) + " reloaded the zandronum versions");
 						break;
 					case ".sendall":
-						sendCommandAll(keywords, sender, channel);
+						sendCommandAll(keywords, member, channel);
 						break;
 					case ".debug":
 						debugMode = !debugMode;
-						sendMessage(channel, "Debug mode is now " + (debugMode ? "en" : "dis") + "abled.");
-						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " " + (debugMode ? "en" : "dis") + "abled debug mode");
+						channel.sendMessage("Debug mode is now " + (debugMode ? "en" : "dis") + "abled.");
+						sendLogAdminMessage(bold(userInfo(member)) + " " + (debugMode ? "en" : "dis") + "abled debug mode");
 						break;
 					case ".ipintel":
 						cfg_data.ipintel_enabled = !cfg_data.ipintel_enabled;
-						sendMessage(channel, "IPIntel is now " + (cfg_data.ipintel_enabled ? "en" : "dis") + "abled.");
-						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " " + (cfg_data.ipintel_enabled ? "en" : "dis") + "abled IPIntel checking");
+						channel.sendMessage("IPIntel is now " + (cfg_data.ipintel_enabled ? "en" : "dis") + "abled.");
+						sendLogAdminMessage(bold(userInfo(member)) + " " + (cfg_data.ipintel_enabled ? "en" : "dis") + "abled IPIntel checking");
 						break;
 					case ".clearrecovery":
 						if (MySQL.clearRecovery()) {
-							sendMessage(channel, "Recovery cleared");
-							sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " cleared the recovery");
+							channel.sendMessage("Recovery cleared");
+							sendLogAdminMessage(bold(userInfo(member)) + " cleared the recovery");
 						}
 						else {
-							sendMessage(channel, "Failed to clear recovery");
+							channel.sendMessage("Failed to clear recovery");
 						}
 						break;
 					case ".updaterecovery":
@@ -805,18 +845,17 @@ public class Bot extends PircBot {
 										added++;
 
 						if (added != 0) {
-							sendMessage(channel, "Added " + added + " servers to recovery");
-							sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " updated the recovery (+"+added+" servers)");
+							channel.sendMessage("Added " + added + " servers to recovery");
+							sendLogAdminMessage("**" + userInfo(member) + "** updated the recovery (+"+added+" servers)");
 						}
 						else {
-							sendMessage(channel, "No servers to add to recovery");
+							channel.sendMessage("No servers to add to recovery");
 						}
 						break;
 					default:
 						break;
 				}
-			}
-			else if (userLevel < 4) {
+			} else {
 				switch (keywords[0].toLowerCase()) {
 					case ".debug":
 					case ".ipintel":
@@ -830,7 +869,7 @@ public class Bot extends PircBot {
 					case ".clearrecovery":
 					case ".updaterecovery":
 					case ".sendall":
-						sendMessage(channel, "Error: You do not have permission to use that command!");
+						channel.sendMessage("Error: You do not have permission to use that command!");
 						break;
 					default:
 						break;
@@ -838,189 +877,152 @@ public class Bot extends PircBot {
 			}
 		}
 	}
-	
-	/**
-	 * Have the bot handle private message events
-	 * @param sender The IRC data of the sender
-	 * @param login The IRC data of the sender
-	 * @param hostname The IRC data of the sender
-	 * @param message The message transmitted
-	 */
-	@Override
-	public void onPrivateMessage(String sender, String login, String hostname, String message) {
 
-		// Check for custom hostmasks
-		if (!Functions.checkLoggedIn(hostname))
-			if (!MySQL.getUsername(hostname).equals("None"))
-				hostname = MySQL.getUsername(hostname);
-		hostname = hostname.replace(".users.zandronum.com","");
+	private AccountType getRole(Member member) {
+		final Set<Role> roles;
+		if (member != null) {
+			roles = member.roles();
+		} else {
+			roles = Collections.emptySet();
+		}
+		return roles.stream()
+				.map(HasName::name)
+				.map(AccountType::fromString)
+				.max(AccountType::compareTo)
+				.orElse(AccountType.NONE);
+	}
+
+	/**
+	 * Have the bot handle DM events
+	 */
+	public void onPrivateMessage(Message msg) {
+		final User author = msg.author();
+		assert author != null;
+
+		final Member member = getGuild()
+				.members()
+				.findAny(m -> m.user().blockingGet().id().equals(author.id()));
+		final String message = msg.content();
+
+		final MessageChannel channel = msg.channel().blockingGet();
+		assert channel != null;
+
 
 		// As of now, you can only perform commands if you are logged in, so we don't need an else here
-		if (Functions.checkLoggedIn(hostname)) {
-			// Generate an array of keywords from the message (similar to onMessage)
-			String[] keywords = message.split(" ");
-			int userLevel = MySQL.getLevel(hostname);
+		// Generate an array of keywords from the message (similar to onMessage)
+		String[] keywords = message.split(" ");
+		final AccountType userLevel = getRole(member);
+		switch (keywords[0].toLowerCase()) {
+			case "register":
+				if (keywords.length == 2)
+					MySQL.registerAccount(member.id(), keywords[1], channel);
+				else
+					channel.sendMessage("Incorrect syntax! Usage is: register <password>");
+				break;
+			default:
+				break;
+		}
+		if (isAccountTypeOf(userLevel, REGISTERED)) { // REGISTERED
 			switch (keywords[0].toLowerCase()) {
-				case "register":
+				case ".commands":
+					channel.sendMessage(processPrivateCommands(userLevel));
+					break;
+				case "changepass":
+				case "changepassword":
+				case "changepw":
 					if (keywords.length == 2)
-						MySQL.registerAccount(hostname, keywords[1], sender);
+						MySQL.changePassword(member.id(), keywords[1], channel);
 					else
-						sendMessage(sender, "Incorrect syntax! Usage is: /msg " + cfg_data.irc_name + " register <password>");
+						channel.sendMessage("Incorrect syntax! Usage is: /msg " + cfg_data.irc_name + " changepw <new_password>");
+					break;
+				case ".getinfo":
+					processServerInfo(userLevel, keywords, channel, member);
+					break;
+				case ".send":
+					sendCommand(userLevel, keywords, member, channel);
+					break;
+				case ".rcon":
+				case ".logfile":
+				case ".passwords":
+					channel.sendMessage("Please use .getinfo <port> instead");
 					break;
 				default:
 					break;
-			}			
-			if (userLevel >= 1) { // REGISTERED
-				switch (keywords[0].toLowerCase()) {
-					case ".commands":
-						sendMessage(sender, processPrivateCommands(userLevel));
-						break;
-					case "changepass":
-					case "changepassword":
-					case "changepw":
-						if (keywords.length == 2)
-							MySQL.changePassword(hostname, keywords[1], sender);
-						else
-							sendMessage(sender, "Incorrect syntax! Usage is: /msg " + cfg_data.irc_name + " changepw <new_password>");
-						break;
-					case ".getinfo":
-						processServerInfo(userLevel, keywords, sender, hostname);
-						break;
-					case ".send":
-						sendCommand(userLevel, keywords, hostname, sender, sender);
-						break;
-					case ".rcon":
-					case ".logfile":
-					case ".passwords":
-						sendMessage(sender, "Please use .getinfo <port> instead");
-						break;
-					default:
-						break;
-				}			
 			}
-			else if (userLevel < 1) {
-				switch (keywords[0].toLowerCase()) {
-					case ".changepass":
-					case ".changepassword":
-					case ".changepw":
-					case ".getinfo":
-					case ".send":
-					case ".rcon":
-					case ".logfile":
-					case ".passwords":
-						sendMessage(sender, "Error: You are either not logged in with NickServ or your account is not registered with " + cfg_data.service_short + " - See " + cfg_data.website_link + "/register");
-						break;
-					default:
-						break;
-				}
-			}
-			if (userLevel >= 3) { // MODERATOR
-				switch (keywords[0].toLowerCase()) {
-					case ".reauth":
-						changeNick(cfg_data.irc_name);
-						sendRawLine("NICKSERV IDENTIFY " + cfg_data.irc_pass);
-						sendLogModeratorMessage(Colors.BOLD + sender + Colors.BOLD + " reauthed me");
-						break;
-					case ".addban":
-					case ".delban":
-					case ".addhost":
-					case ".delhost":
-						sendMessage(sender, "Please use the website instead");
-						break;
-					case ".rejoin":
-						rejoinChannel();
-						sendLogModeratorMessage(Colors.BOLD + sender + Colors.BOLD + " rejoined me");
-						break;
-					default:
-						break;
-				}			
-			}
-			if (userLevel >= 4) { // ADMIN
-				switch (keywords[0].toLowerCase()) {
-					case ".banwad":
-					case ".unbanwad":
-						sendMessage(sender, "Please use the website instead");
-						break;
-					case ".addstartwad":
-						if (keywords.length > 1)
-							addExtraWad(Functions.implode(Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length), " "), sender);
-						break;
-					case ".delstartwad":
-						if (keywords.length > 1)
-							deleteExtraWad(Functions.implode(Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length), " "), sender);
-						break;
-					case ".msg":
-						messageChannel(keywords, sender);
-						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " sent message: " + Colors.BOLD + message.substring(message.indexOf(' ')+1));
-						break;
-					case ".action":
-						this.sendAction(cfg_data.irc_channel, Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
-						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " sent action: " + Colors.BOLD + message.substring(message.indexOf(' ')+1));
-						break;
-					case ".raw":
-						sendRawLine(Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
-						sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " sent raw line: " + Colors.BOLD + message.substring(message.indexOf(' ')+1));
-						break;
-					case ".terminate":
-						if (System.currentTimeMillis() / 1000 > (terminateTimestamp / 1000) + 5) {
-							terminateConfirmationTimes = 0;
-							terminateTimestamp = System.currentTimeMillis();
-						}
-						if (System.currentTimeMillis() / 1000 <= (terminateTimestamp / 1000) + 5) {
-							if (terminateConfirmationTimes == 0) {
-								sendLogAdminMessage(Colors.RED + Colors.BOLD + sender + Colors.BOLD + " is attempting to terminate me!");
-								sendMessage(sender, "WARNING: This command WILL terminate the bot.");
-								sendMessage(sender, "It will to be restarted by someone who has direct");
-								sendMessage(sender, "access to the server's terminal.");
-								sendMessage(sender, " - If you're REALLY sure you want to kill the bot, type .terminate again -");
-								terminateConfirmationTimes += 1;
-							}
-							else if (terminateConfirmationTimes == 1) {
-								sendLogAdminMessage(Colors.RED + Colors.BOLD + sender + Colors.BOLD + " terminated me!");
-								sendMessage(sender, "The bot will close NOW!");
-								messageChannel(("- - The bot is closing now (terminate command issued by " + sender + ") -").split(" "), sender);
-								quitServer("Killed by " + sender);
-								System.exit(1);
-							}
-						}
-						break;
-					default:
-						break;
-				}
+		} else {
+			switch (keywords[0].toLowerCase()) {
+				case ".changepass":
+				case ".changepassword":
+				case ".changepw":
+				case ".getinfo":
+				case ".send":
+				case ".rcon":
+				case ".logfile":
+				case ".passwords":
+					channel.sendMessage("Error: You are either not logged in with NickServ or your account is not registered with " + cfg_data.service_short + " - See " + cfg_data.website_link + "/register");
+					break;
+				default:
+					break;
 			}
 		}
-		else {
-			sendMessage(sender, "Error: Please make sure you are logged in with NickServ and rejoin any channels I am in. If you have a hostmask that doesn't match *.users.zandronum.com, it needs to be whitelisted by a Moderator");
+
+		if (isAccountTypeOf(userLevel, ADMIN)) { // ADMIN
+			switch (keywords[0].toLowerCase()) {
+				case ".addstartwad":
+					if (keywords.length > 1)
+						addExtraWad(Functions.implode(Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length), " "), member, channel);
+					break;
+				case ".delstartwad":
+					if (keywords.length > 1)
+						deleteExtraWad(Functions.implode(Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length), " "), member, channel);
+					break;
+				case ".msg":
+					messageChannel(keywords, channel);
+					sendLogAdminMessage("**" + userInfo(member) + "** sent message: **" + message.substring(message.indexOf(' ')+1));
+					break;
+				case ".action":
+					channel.sendMessage("/me " + Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
+					sendLogAdminMessage("**" + userInfo(member) + "** sent action: " + bold(message.substring(message.indexOf(' ')+1)));
+					break;
+				default:
+					break;
+			}
 		}
 	}
-	
+
+	private Guild getGuild() {
+		return catnip.cache()
+				.guild(guildId)
+				.blockingGet();
+	}
+
 	/**
 	 * This displays commands available for the user
 	 * @param userLevel The level based on AccountType enumeration
 	 */
-	private String processCommands(int userLevel) {
+	private String processCommands(AccountType userLevel) {
 		logMessage(LOGLEVEL_TRIVIAL, "Displaying processComamnds().");
 		String commands = "Public Commands: ";
 		commands += ".commands .file .get .help .liststartwads .owner .servers .uptime .whoami ";
-		if (userLevel >= 1)
+		if (AccountType.isAccountTypeOf(userLevel, REGISTERED))
 			commands += "[R] .getinfo .host .kill .killmine .load .slot .versions ";
-		if (userLevel >= 2)
+		if (AccountType.isAccountTypeOf(userLevel, VIP))
 			commands += "[V] .cpu .mem .protect ";
-		if (userLevel >= 3)
+		if (AccountType.isAccountTypeOf(userLevel, MODERATOR))
 			commands += "[M] .broadcast .killinactive ";
-		if (userLevel >= 4)
+		if (AccountType.isAccountTypeOf(userLevel, ADMIN))
 			commands += "[A] .debug .ipintel .killall .killversion .notice .off .on .reloadconfig .reloadversions .sendall .clearrecovery .updaterecovery";
 		return commands;
 	}
 	
-	private String processPrivateCommands(int userLevel) {
+	private String processPrivateCommands(AccountType userLevel) {
 		logMessage(LOGLEVEL_TRIVIAL, "Displaying processPrivateCommands().");
 		String commands = "Private Commands: ";
-		if (userLevel >= 1)
+		if (AccountType.isAccountTypeOf(userLevel, REGISTERED))
 			commands += ".changepassword .getinfo .send ";
-		if (userLevel >= 3)
+		if (AccountType.isAccountTypeOf(userLevel, MODERATOR))
 			commands += "[M] .reauth .rejoin ";
-		if (userLevel >= 4)
+		if (AccountType.isAccountTypeOf(userLevel, ADMIN))
 			commands += "[A] .action .addstartwad .delstartwad .msg .raw .terminate";
 		return commands;
 	}
@@ -1028,66 +1030,57 @@ public class Bot extends PircBot {
 	/**
 	 * Broadcasts the uptime of a specific server
 	 * @param port String - port numero
+	 * @param channel
 	 */
-	public void calculateUptime(String port, String channel) {
+	public void calculateUptime(String port, MessageChannel channel) {
 		if (Functions.isNumeric(port)) {
 			int portValue = Integer.valueOf(port);
 			Server s = getServer(portValue);
 			if (s != null) {
 				if (portValue >= min_port && portValue < max_port)
-					sendMessage(channel, s.port + " has been running for " + Functions.calculateTime(System.currentTimeMillis() - s.time_started));
+					channel.sendMessage(s.port + " has been running for " + Functions.calculateTime(System.currentTimeMillis() - s.time_started));
 				else
-					sendMessage(channel, "Port must be between " + min_port + " and " + max_port);
+					channel.sendMessage("Port must be between " + min_port + " and " + max_port);
 			}
 			else
-				sendMessage(channel, "There is no server running on port " + port);
+				channel.sendMessage("There is no server running on port " + port);
 		}
 		else
-			sendMessage(channel, "Port must be a number (ex: .uptime 15000)");
+			channel.sendMessage("Port must be a number (ex: .uptime 15000)");
 	}
 
 	/**
 	 * Sets the notice (global announcement to all servers)
 	 * @param keywords String[] - array of words (message)
 	 * @param userLevel int - bitmask level
+	 * @param channel
 	 */
-	public void setNotice(String[] keywords, int userLevel, String channel) {
+	public void setNotice(String[] keywords, AccountType userLevel, MessageChannel channel) {
 		if (keywords.length == 1) {
-			sendMessage(channel, "Notice is: " + cfg_data.bot_notice);
+			channel.sendMessage("Notice is: " + cfg_data.bot_notice);
 			return;
 		}
 		if (isAccountTypeOf(userLevel, ADMIN)) {
 			cfg_data.bot_notice = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
-			sendMessage(channel, "New notice has been set.");
+			channel.sendMessage("New notice has been set.");
 		}
 		else
-			sendMessage(channel, "You do not have permission to set the notice.");
-	}
-
-	/**
-	 * Returns the login of the invoking user
-	 * @param hostname String - the user's hostname
-	 * @param level int - bitmask level of the user
-	 * @return whether the user is logged in or not
-	 */
-	private String getLoggedIn(String hostname, int level) {
-		if (isAccountTypeOf(level, REGISTERED))
-			return "You are logged in as " + Functions.getUserName(hostname);
-		else
-			return "You are not logged in or do not have an account with " + cfg_data.service_short + ". Please visit " + cfg_data.website_link + "/register for instructions on how to register";
+			channel.sendMessage("You do not have permission to set the notice.");
 	}
 
 	/**
 	 * Sends a message to the channel, from the bot
 	 * @param keywords String[] - message, split by spaces
-	 * @param sender String - name of the sender
+	 * @param channel String - name of the sender
 	 */
-	private void messageChannel(String[] keywords, String sender) {
-		if (keywords.length < 2)
-			sendMessage(sender, "Incorrect syntax! Correct usage is .msg your_message");
+	private void messageChannel(String[] keywords, MessageChannel channel) {
+		if (keywords.length < 2 || !channel.isGuild())
+			channel.sendMessage("Incorrect syntax! Correct usage is .msg your_message");
 		else {
 			String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
-			sendMessage(cfg_data.irc_channel, message);
+
+			final Optional<GuildChannel> targetChannel = channelByName(cfg_data.irc_channel);
+			targetChannel.ifPresent(ch -> ch.asMessageChannel().sendMessage(message));
 		}
 	}
 
@@ -1096,38 +1089,39 @@ public class Bot extends PircBot {
 	 * @param keywords The keywords sent (should be a length of two)
 	 * @param channel The channel to respond to
 	 */
-	private void processFile(String[] keywords, String channel) {
+	private void processFile(String[] keywords, MessageChannel channel) {
 		logMessage(LOGLEVEL_TRIVIAL, "Displaying processFile().");
 		if (keywords.length == 2) {
 			File file = new File(cfg_data.bot_wad_directory_path + Functions.cleanInputFile(keywords[1].toLowerCase()));
 			if (file.exists())
-				sendMessage(channel, "File '" + keywords[1].toLowerCase() + "' exists on the server.");
+				channel.sendMessage("File '" + keywords[1].toLowerCase() + "' exists on the server.");
 			else
-				sendMessage(channel, "Not found!");
+				channel.sendMessage("Not found!");
 		} else
-			sendMessage(channel, "Incorrect syntax, use: .file <filename.wad>");
+			channel.sendMessage("Incorrect syntax, use: .file <filename.wad>");
 	}
 
 	/**
 	 * Gets a field requested by the user
 	 * @param keywords The field the user wants
+	 * @param channel
 	 */
-	private void processGet(String[] keywords, String channel) {
+	private void processGet(String[] keywords, MessageChannel channel) {
 		logMessage(LOGLEVEL_TRIVIAL, "Displaying processGet().");
 		if (keywords.length != 3) {
-			sendMessage(channel, "Proper syntax: .get <port> <property>");
+			channel.sendMessage("Proper syntax: .get <port> <property>");
 			return;
 		}
 		if (!Functions.isNumeric(keywords[1])) {
-			sendMessage(channel, "Port is not a valid number");
+			channel.sendMessage("Port is not a valid number");
 			return;
 		}
 		Server tempServer = getServer(Integer.parseInt(keywords[1]));
 		if (tempServer == null) {
-			sendMessage(channel, "There is no server running on this port.");
+			channel.sendMessage("There is no server running on this port.");
 			return;
 		}
-		sendMessage(channel, tempServer.getField(keywords[2]));
+		channel.sendMessage(tempServer.getField(keywords[2]));
 	}
 
 	/**
@@ -1137,21 +1131,19 @@ public class Bot extends PircBot {
 	 * @param hostname IRC data associated with the sender
 	 * @param message The entire message to be processed
 	 */
-	public void processHost(int userLevel, String channel, String sender, String hostname, String message, boolean autoRestart, int port) {
-		logMessage(LOGLEVEL_NORMAL, "Processing the host command for " + Functions.getUserName(hostname) + " with the message \"" + message + "\".");
+	public void processHost(AccountType userLevel, MessageChannel channel, String hostname, String message, int port) {
+		logMessage(LOGLEVEL_NORMAL, "Processing the host command for " + hostname + " with the message \"" + message + "\".");
 		if (botEnabled || isAccountTypeOf(userLevel, ADMIN)) {
-			autoRestart = (message.contains("autorestart=true") || message.contains("autorestart=on"));
+			boolean autoRestart = (message.contains("autorestart=true") || message.contains("autorestart=on"));
 			int slots = MySQL.getMaxSlots(hostname);
-			int userServers;
-			if (getUserServers(Functions.getUserName(hostname)) == null) userServers = 0;
-			else userServers = getUserServers(Functions.getUserName(hostname)).size();
+			int userServers = getUserServers(hostname).size();
 			if (slots > userServers)
-				Server.handleHostCommand(this, servers, channel, sender, hostname, message, userLevel, autoRestart, port, null, false);
+				Server.handleHostCommand(this, servers, channel, hostname, message, userLevel, autoRestart, port, null, false);
 			else
-				sendMessage(channel, "You have reached your server limit (" + slots + ")");
+				channel.sendMessage("You have reached your server limit (" + slots + ")");
 		}
 		else
-			sendMessage(channel, "The bot is currently disabled from hosting for the time being. Sorry for any inconvenience!");
+			channel.sendMessage("The bot is currently disabled from hosting for the time being. Sorry for any inconvenience!");
 	}
 
 	/**
@@ -1159,24 +1151,26 @@ public class Bot extends PircBot {
 	 * @param userLevel The user's bitmask level
 	 * @param keywords The keywords to be processed
 	 * @param hostname hostname from the sender
+	 * @param sender
+	 * @param channel
 	 */
-	private void processKill(int userLevel, String[] keywords, String hostname, String sender, String channel) {
+	private void processKill(AccountType userLevel, String[] keywords, Member hostname, MessageChannel sender, MessageChannel channel) {
 		logMessage(LOGLEVEL_NORMAL, "Processing kill.");
 		// Ensure proper syntax
 		if (keywords.length != 2) {
-			sendMessage(channel, "Proper syntax: .kill <port>");
+			channel.sendMessage("Proper syntax: .kill <port>");
 			return;
 		}
 
 		// Safety net
 		if (servers == null) {
-			sendMessage(channel, "Critical error: Linkedlist is null, contact an administrator.");
+			channel.sendMessage("Critical error: Linkedlist is null, contact an administrator.");
 			return;
 		}
 
 		// If server list is empty
 		if (servers.isEmpty()) {
-			sendMessage(channel, "There are currently no servers running!");
+			channel.sendMessage("There are currently no servers running!");
 			return;
 		}
 
@@ -1185,10 +1179,10 @@ public class Bot extends PircBot {
 			if (Functions.isNumeric(keywords[1])) {
 				Server server = getServer(Integer.parseInt(keywords[1]));
 				if (server != null) {
-					if (Functions.getUserName(server.irc_hostname).equalsIgnoreCase(Functions.getUserName(hostname)) || isAccountTypeOf(userLevel, MODERATOR))
+					if (server.userId.equalsIgnoreCase(hostname.id()) || isAccountTypeOf(userLevel, MODERATOR))
 						if (server.serverprocess != null) {
 							server.being_killed = true;
-							if (Functions.getUserName(server.irc_hostname).equalsIgnoreCase(Functions.getUserName(hostname)))
+							if (server.userId.equalsIgnoreCase(hostname.id()))
 							{
 								server.being_killed_by_owner = true;
 							}
@@ -1196,29 +1190,30 @@ public class Bot extends PircBot {
 							server.serverprocess.terminateServer();
 						}
 						else {
-							sendMessage(channel, "Error: Server process is null, contact an administrator.");
+							channel.sendMessage("Error: Server process is null, contact an administrator.");
 						}
 					else {
-						sendMessage(channel, "Error: You do not own this server!");
+						channel.sendMessage("Error: You do not own this server!");
 					}
 				}
 				else {
-					sendMessage(channel, "Error: There is no server running on this port.");
+					channel.sendMessage("Error: There is no server running on this port.");
 				}
 			} else {
-				sendMessage(channel, "Improper port number.");
+				channel.sendMessage("Improper port number.");
 			}
 		// Admins/mods can kill anything
 		} else if (isAccountTypeOf(userLevel, MODERATOR)) {
-			killServer(keywords[1], sender, channel); // Can pass string, will process it in the method safely if something goes wrong
+			killServer(keywords[1], hostname, channel); // Can pass string, will process it in the method safely if something goes wrong
 		}
 	}
 
 	/**
 	 * When requested it will kill every server in the linked list
-	 * @param hostname hostname from the sender
+	 * @param sender
+	 * @param channel
 	 */
-	private void processKillAll(String sender, String channel) {
+	private void processKillAll(Member sender, MessageChannel channel) {
 		logMessage(LOGLEVEL_IMPORTANT, "Processing killall.");
 		// If we use this.servers instead of a temporary list, it will remove the servers from the list while iterating over them
 		// This will throw a concurrent modification exception
@@ -1232,30 +1227,30 @@ public class Bot extends PircBot {
 				s.auto_restart = false;
 				s.killServer();
 			}
-			sendMessage(channel, Functions.pluralize("Killed a total of " + serverCount + " server{s}.", serverCount));
+			channel.sendMessage(Functions.pluralize("Killed a total of " + serverCount + " server{s}.", serverCount));
 			//if (channel != cfg_data.irc_channel)
 			//	sendMessage(cfg_data.irc_channel, Functions.pluralize("Killed a total of " + serverCount + " server{s}.", serverCount));
-			sendLogAdminMessage(Functions.pluralize(Colors.BOLD + sender + Colors.BOLD + " Killed a total of " + Colors.BOLD + serverCount + Colors.BOLD + " server{s}.", serverCount));
+			sendLogAdminMessage(Functions.pluralize(bold(userInfo(sender)) + " Killed a total of " + bold("" + serverCount) + " server{s}.", serverCount));
 		} else
-			sendMessage(channel, "There are no servers running.");
+			channel.sendMessage("There are no servers running.");
 	}
 
-	private void processKillVersion(String[] keywords, String sender, String channel) {
+	private void processKillVersion(String[] keywords, Member sender, MessageChannel channel) {
 		if (keywords.length != 2) {
-			sendMessage(channel, "Invalid amount of arguments. Syntax: .killversion <version>");
+			channel.sendMessage("Invalid amount of arguments. Syntax: .killversion <version>");
 			return;
 		}
 
 		String version = keywords[1];
 
 		if (!vSHashmap.containsKey(version)) {
-			sendMessage(channel, "Unknown version " + version);
+			channel.sendMessage("Unknown version " + version);
 			return;
 		}
 
-		List<Server> tempList = new LinkedList<Server>(vSHashmap.get(version));
+		List<Server> tempList = new ArrayList<>(vSHashmap.get(version));
 		if (tempList.size() < 1) {
-			sendMessage(channel, "No servers to kill.");
+			channel.sendMessage("No servers to kill.");
 			return;
 		}
 
@@ -1268,18 +1263,19 @@ public class Bot extends PircBot {
 			killed++;
 		}
 
-		sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " kills all " + killed + Colors.BOLD + keywords[1] + Colors.BOLD + " servers");
-		sendMessage(channel, "Killed a total of " + killed + " servers.");
+		sendLogAdminMessage(bold(userInfo(sender)) + " kills all " + killed + bold(keywords[1]) + " servers");
+		channel.sendMessage("Killed a total of " + killed + " servers.");
 		//if (channel != cfg_data.irc_channel)
 		//	sendMessage(cfg_data.irc_channel, "Killed a total of " + killed + " servers.");
 	}
 	/**
 	 * This will look through the list and kill all the servers that the hostname owns
 	 * @param hostname The hostname of the person invoking this command
+	 * @param channel
 	 */
-	private void processKillMine(String hostname, String sender, String channel) {
+	private void processKillMine(Member hostname, MessageChannel channel) {
 		logMessage(LOGLEVEL_TRIVIAL, "Processing killmine.");
-		List<Server> servers = getUserServers(Functions.getUserName(hostname));
+		List<Server> servers = getUserServers(hostname.id());
 		if (servers != null) {
 			ArrayList<String> ports = new ArrayList<>();
 			for (Server s : servers) {
@@ -1289,28 +1285,30 @@ public class Bot extends PircBot {
 				s.killServer();
 				ports.add(String.valueOf(s.port));
 			}
-			if (ports.size() > 0) {
-				sendLogUserMessage(Functions.pluralize(Colors.BOLD + sender + Colors.BOLD + " Killed their " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") +")", ports.size()));
-				sendMessage(channel, Functions.pluralize("Killed your " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") +")", ports.size()));
+			if (!ports.isEmpty()) {
+				sendLogUserMessage(Functions.pluralize("%s Killed their %d server{s} (%s)".formatted(bold(userInfo(hostname)), ports.size(), Functions.implode(ports, ", ")), ports.size()));
+				channel.sendMessage(Functions.pluralize("Killed your %d server{s} (%s)".formatted(ports.size(), Functions.implode(ports, ", ")), ports.size()));
 				//if (channel != cfg_data.irc_channel)
 				//	sendMessage(cfg_data.irc_channel, Functions.pluralize(sender + " killed their " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") +")", ports.size()));
 			}
 			else {
-				sendMessage(channel, "You do not have any servers running.");
+				channel.sendMessage("You do not have any servers running.");
 			}
 		} else {
-			sendMessage(channel, "There are no servers running.");
+			channel.sendMessage("There are no servers running.");
 		}
 	}
 
 	/**
 	 * This will kill inactive servers based on the days specified in the second parameter
 	 * @param keywords The field the user wants
+	 * @param sender
+	 * @param channel
 	 */
-	private void processKillInactive(String[] keywords, String sender, String channel) {
+	private void processKillInactive(String[] keywords, Member sender, MessageChannel channel) {
 		logMessage(LOGLEVEL_NORMAL, "Processing a kill of inactive servers.");
 		if (keywords.length < 2) {
-			sendMessage(channel, "Proper syntax: .killinactive <days since> (ex: use .killinactive 3 to kill servers that haven't seen anyone for 3 days)");
+			channel.sendMessage("Proper syntax: .killinactive <days since> (ex: use .killinactive 3 to kill servers that haven't seen anyone for 3 days)");
 			return;
 		}
 		if (Functions.isNumeric(keywords[1])) {
@@ -1318,10 +1316,10 @@ public class Bot extends PircBot {
 			int numOfDays = Integer.parseInt(keywords[1]);
 			if (numOfDays > 0) {
 				if (servers == null || servers.isEmpty()) {
-					sendMessage(channel, "No servers to kill.");
+					channel.sendMessage("No servers to kill.");
 					return;
 				}
-				sendMessage(channel, "Killing servers with " + numOfDays + "+ days of inactivity.");
+				channel.sendMessage("Killing servers with " + numOfDays + "+ days of inactivity.");
 				//if (channel != cfg_data.irc_channel)
 				//	sendMessage(cfg_data.irc_channel, "Killing servers with " + numOfDays + "+ days of inactivity.");
 				// Temporary list to avoid concurrent modification exception
@@ -1337,31 +1335,33 @@ public class Bot extends PircBot {
 						}
 				}
 				if (ports.size() == 0) {
-					sendMessage(channel, "No servers were killed.");
+					channel.sendMessage("No servers were killed.");
 				}
 				else {
-					sendLogAdminMessage(Functions.pluralize(Colors.BOLD + sender + Colors.BOLD + " Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") + ")", ports.size()));
-					sendMessage(channel, Functions.pluralize("Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") + ")", ports.size()));
+					sendLogAdminMessage(Functions.pluralize(bold(userInfo(sender)) + " Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") + ")", ports.size()));
+					channel.sendMessage(Functions.pluralize("Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") + ")", ports.size()));
 					//if (channel != cfg_data.irc_channel)
 					//	sendMessage(cfg_data.irc_channel, Functions.pluralize("Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") + ")", ports.size()));
 				}
 			} else {
-				sendMessage(channel, "Using zero or less for .killinactive is not allowed.");
+				channel.sendMessage("Using zero or less for .killinactive is not allowed.");
 			}
 		} else {
-			sendMessage(channel, "Unexpected parameter for method.");
+			channel.sendMessage("Unexpected parameter for method.");
 		}
 	}
 
 	/**
 	 * Admins can turn off hosting with this
+	 * @param sender
+	 * @param channel
 	 */
-	private void processOff(String sender, String channel) {
+	private void processOff(Member sender, MessageChannel channel) {
 		logMessage(LOGLEVEL_IMPORTANT, "An admin has disabled hosting.");
 		if (botEnabled) {
 			botEnabled = false;
-			sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " disables hosting");
-			sendMessage(channel, "Bot disabled.");
+			sendLogAdminMessage(bold(userInfo(sender)) + " disables hosting");
+			channel.sendMessage("Bot disabled.");
 			//if (channel != cfg_data.irc_channel)
 			//	sendMessage(cfg_data.irc_channel, "Bot disabled.");
 		}
@@ -1369,13 +1369,15 @@ public class Bot extends PircBot {
 
 	/**
 	 * Admins can re-enable hosting with this
+	 * @param sender
+	 * @param channel
 	 */
-	private void processOn(String sender, String channel) {
+	private void processOn(Member sender, MessageChannel channel) {
 		logMessage(LOGLEVEL_IMPORTANT, "An admin has re-enabled hosting.");
 		if (!botEnabled) {
 			botEnabled = true;
-			sendLogAdminMessage(Colors.BOLD + sender + Colors.BOLD + " enables hosting");
-			sendMessage(channel, "Bot enabled.");
+			sendLogAdminMessage(bold(userInfo(sender)) + " enables hosting");
+			channel.sendMessage("Bot enabled.");
 			//if (channel != cfg_data.irc_channel)
 			//	sendMessage(cfg_data.irc_channel, "Bot enabled.");
 		}
@@ -1384,20 +1386,21 @@ public class Bot extends PircBot {
 	/**
 	 * This checks for who owns the server on the specified port
 	 * @param keywords The keywords to pass
+	 * @param channel
 	 */
-	private void processOwner(String[] keywords, String channel) {
+	private void processOwner(String[] keywords, MessageChannel channel) {
 		logMessage(LOGLEVEL_DEBUG, "Processing an owner.");
 			if (keywords.length == 2) {
 				if (Functions.isNumeric(keywords[1])) {
 					Server s = getServer(Integer.parseInt(keywords[1]));
 					if (s != null)
-						sendMessage(channel, "The owner of port " + keywords[1] + " is: " + s.sender + "[" + Functions.getUserName(s.irc_hostname) + "].");
+						channel.sendMessage("The owner of port " + keywords[1] + " is: " + s.sender + "[" + s.userId + "].");
 					else
-						sendMessage(channel, "There is no server running on " + keywords[1] + ".");
+						channel.sendMessage("There is no server running on " + keywords[1] + ".");
 				} else
-					sendMessage(channel, "Invalid port number.");
+					channel.sendMessage("Invalid port number.");
 			} else
-				sendMessage(channel, "Improper syntax, use: .owner <port>");
+				channel.sendMessage("Improper syntax, use: .owner <port>");
 	}
 
 	/**
@@ -1430,26 +1433,26 @@ public class Bot extends PircBot {
 	 * Handles RCON stuff
 	 * @param userLevel int - the user's level (permissions)
 	 * @param keywords String[] - message split by spaces
-	 * @param sender String - the nickname of the sender
+	 * @param channel String - the nickname of the sender
 	 * @param hostname String - the hostname of the sender
 	 */
-	private void processServerInfo(int userLevel, String[] keywords, String sender, String hostname) {
-		logMessage(LOGLEVEL_NORMAL, "Processing a request for rcon (from " + sender + ").");
+	private void processServerInfo(AccountType userLevel, String[] keywords, MessageChannel channel, Member hostname) {
+		logMessage(LOGLEVEL_NORMAL, "Processing a request for rcon (from " + channel + ").");
 		if (isAccountTypeOf(userLevel, REGISTERED)) {
 			if (keywords.length == 2) {
 				if (Functions.isNumeric(keywords[1])) {
 					int port = Integer.parseInt(keywords[1]);
 					Server s = getServer(port);
 					if (s != null) {
-						boolean isHoster = Functions.getUserName(s.irc_hostname).equals(Functions.getUserName(hostname));
+						boolean isHoster = s.userId.equals(hostname.id());
 						if (isHoster || isAccountTypeOf(userLevel, MODERATOR)) {
-							String logSender = (isHoster ? "their own" : Colors.BOLD + s.sender + Colors.BOLD + "'s");
-							String logStr = Colors.BOLD + sender + Colors.BOLD + " requests server info for " + logSender + " server on port " + port;
+							String logSender = (isHoster ? "their own" : bold(s.sender) + "'s");
+							String logStr = bold(userInfo(hostname)) + " requests server info for " + logSender + " server on port " + port;
 							
-							sendMessage(sender, "Log File: " + cfg_data.static_link + "/logs/" + s.server_id + ".txt");
-							sendMessage(sender, "RCON Password: " + s.rcon_password);
-							sendMessage(sender, "Connect Password: " + s.connect_password);
-							sendMessage(sender, "Join Password: " + s.join_password);
+							channel.sendMessage("Log File: " + cfg_data.static_link + "/logs/" + s.server_id + ".txt");
+							channel.sendMessage("RCON Password: " + s.rcon_password);
+							channel.sendMessage("Connect Password: " + s.connect_password);
+							channel.sendMessage("Join Password: " + s.join_password);
 							
 							if (isHoster) {
 								sendLogUserMessage(logStr);
@@ -1458,135 +1461,114 @@ public class Bot extends PircBot {
 							}
 						}
 						else
-							sendMessage(sender, "You do not own this server.");
+							channel.sendMessage("You do not own this server.");
 					}
 					else
-						sendMessage(sender, "Server does not exist.");
+						channel.sendMessage("Server does not exist.");
 				}
 				else
-					sendMessage(sender, "Port must be a number!");
+					channel.sendMessage("Port must be a number!");
 			}
 			else
-				sendMessage(sender, "Incorrect syntax! Correct syntax is .rcon <port>");
+				channel.sendMessage("Incorrect syntax! Correct syntax is .rcon <port>");
 		}
 	}
 
 	/**
 	 * Sends a message to the channel with a list of servers from the user
 	 * @param keywords String[] - the message
+	 * @param channel
 	 */
-	private void processServers(String[] keywords, String channel) {
+	private void processServers(String[] keywords, MessageChannel channel) {
 		logMessage(LOGLEVEL_NORMAL, "Getting a list of servers.");
 		if (keywords.length == 2) {
-			List<Server> servers = getUserServers(Functions.getUserName(keywords[1]));
+			List<Server> servers = getUserServers(keywords[1]);
 			if (servers != null && servers.size() > 0) {
 				for (Server server : servers) {
-					sendMessage(channel,  server.port + ": \"" + server.servername + ((server.wads != null) ?
+					channel.sendMessage( server.port + ": \"" + server.servername + ((server.wads != null) ?
 					"\" with wads " + Functions.implode(server.wads, ", ") : ""));
 				}
 			}
 			else
-				sendMessage(channel, "User " + Functions.getUserName(keywords[1]) + " has no servers running.");
+				channel.sendMessage("User " + keywords[1] + " has no servers running.");
 		}
 		else if (keywords.length == 1) {
-			sendMessage(channel, Functions.pluralize("There are " + servers.size() + " server{s}.", servers.size()));
+			channel.sendMessage(Functions.pluralize("There are " + servers.size() + " server{s}.", servers.size()));
 		}
 		else
-			sendMessage(channel, "Incorrect syntax! Correct usage is .servers or .servers <username>");
-	}
-
-	/**
-	 * Have the bot handle kicks, this is useful for rejoining when kicked
-	 * @param channel String - the channel
-	 * @param kickerNick String - the name of the kicker
-	 * @param kickerLogin String - the login of the kicker
-	 * @param kickerHostname String - the hostname of the kicker
-	 * @param recipientNick String - the name of the kicked user
-	 * @param reason String - the reason for being kicked
-	 */
-	@Override
-	public void onKick(String channel, String kickerNick, String kickerLogin, String kickerHostname, String recipientNick, String reason) {
-		// Rejoin the channel if kicked
-		if (recipientNick.equalsIgnoreCase(getNick()) && channel.equalsIgnoreCase(cfg_data.irc_channel)) {
-			this.joinChannel(cfg_data.irc_channel);
-		}
-	}
-
-	/**
-	 * Handles channel joins
-	 * @param channel String - the name of the channel
-	 * @param sender String - the user who joined
-	 * @param login String - the login of the user who joined
-	 * @param hostname String - the hostname of the user who joined
-	 */
-	@Override
-	public void onJoin(String channel, String sender, String login, String hostname) {
-		// Process joins
+			channel.sendMessage("Incorrect syntax! Correct usage is .servers or .servers <username>");
 	}
 
 	/**
 	 * Allows external objects to send messages to the core channel
 	 * @param msg The message to deploy
 	 */
-	public void sendMessageToChannel(String msg) {
-		sendMessage(cfg_data.irc_channel, msg);
+	public void sendMessageToCoreChannel(String msg) {
+		final Optional<GuildChannel> guildChannel = channelByName(cfg_data.irc_channel);
+		guildChannel.ifPresentOrElse(
+				ch -> ch.asMessageChannel().sendMessage(msg),
+				() -> System.out.println("Can't get core channel")
+		);
+	}
+
+	/**
+	 * Allows external objects to send messages to the log channel
+	 * @param msg The message to deploy
+	 */
+	public void sendMessageToLogChannel(String msg) {
+		final Optional<GuildChannel> guildChannel = channelByName(cfg_data.log_channel);
+		guildChannel.ifPresentOrElse(
+				ch -> ch.asMessageChannel().sendMessage(msg),
+				() -> System.out.println("Can't get core channel")
+		);
+	}
+
+	private Optional<GuildChannel> channelByName(String channel) {
+		catnip.fetchGatewayInfo().blockingGet();
+		return catnip.cache()
+				.channels(this.guildId)
+				.stream()
+				.filter(ch -> channel.equals(ch.name()))
+				.findAny();
 	}
 
 	public void sendDebugMessage(String message) {
-		if (debugMode)
-			sendMessage(cfg_data.irc_channel, "DEBUG " + message);
+		sendMessageToLogChannel("DEBUG " + message);
 	}
 
     public void sendLogMessage(String message) {
-		if (cfg_data.log_channel != null)
-			sendMessage(cfg_data.log_channel, message);
+		if (cfg_data.log_channel != null) {
+			final Optional<GuildChannel> guildChannel = channelByName(cfg_data.log_channel);
+			guildChannel.ifPresentOrElse(
+					ch -> ch.asMessageChannel().sendMessage(message),
+					() -> System.out.println("Can't get log channel")
+			);
+		}
 	}
     
     public void sendLogInfoMessage(String message) {
-    	sendLogMessage(Colors.GREEN + "[" + Colors.BOLD + "I" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    	sendLogMessage("[" + bold("I") + "]" + " " + message);
     }
     
     public void sendLogErrorMessage(String message) {
-    	sendLogMessage(Colors.RED + "[" + Colors.BOLD + "!" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    	sendLogMessage("[" + bold("!") + "]" + " " + message);
     }
     
     public void sendLogAdminMessage(String message) {
-    	sendLogMessage(Colors.YELLOW + "[" + Colors.BOLD + "A" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    	sendLogMessage("[" + bold("A") + "]" + " " + message);
     }
     
     public void sendLogModeratorMessage(String message) {
-    	sendLogMessage(Colors.PURPLE + "[" + Colors.BOLD + "M" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    	sendLogMessage("[" + bold("M") + "]" + " " + message);
     }
     
     public void sendLogUserMessage(String message) {
-    	sendLogMessage(Colors.CYAN + "[" + Colors.BOLD + "U" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    	sendLogMessage("[" + bold("U") + "]" + " " + message);
     }
     
     public void sendLogServerMessage(String message) {
-    	sendLogMessage(Colors.BLUE + "[" + Colors.BOLD + "S" + Colors.BOLD + "]" + Colors.NORMAL + " " + message);
+    	sendLogMessage("[" + bold("S") + "]" + " " + message);
     }
-
-	/**
-	 * Called when the bot is disconnected
-	 * Ideally, attempt to reconnect
-	 */
-	@Override
-	public void onDisconnect() {
-		while (!isConnected()) {
-			try {
-				Thread.sleep(10000);
-			} catch (InterruptedException e) {
-				Logger.logMessage(LOGLEVEL_CRITICAL, "Could not sleep.");
-				Thread.currentThread().interrupt();
-			}
-			try {
-				reconnect();
-			} catch (Exception e) {
-				System.out.println("Couldn't reconnect... trying again in 30 seconds.");
-				Logger.logMessage(LOGLEVEL_IMPORTANT, "Could not reconnect. Attempting to reconnect in 30 seconds.");
-			}
-		}
-	}
 
 	/**
 	 * Contains the main methods that are run on start up for the bot
@@ -1616,5 +1598,9 @@ public class Bot extends PircBot {
 		// Start the bot
 		Bot b = new Bot(cfg_data);
 		b.config_file = args[0];
+	}
+
+	public void sendMessage(MessageChannel channel, String msg) {
+		channel.sendMessage(msg);
 	}
 }

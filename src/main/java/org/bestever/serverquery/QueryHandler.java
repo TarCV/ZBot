@@ -1,5 +1,6 @@
 // --------------------------------------------------------------------------
 // Copyright (C) 2012-2013 Best-Ever
+// Copyright (C) 2021 TarCV
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -228,37 +229,37 @@ public class QueryHandler extends Thread {
 		} catch (NetworkBufferException nbe) {
 			nbe.printStackTrace();
 			if (nbe.getMessage() != null)
-				bot.sendMessageToChannel(nbe.getMessage());
+				bot.sendMessageToCoreChannel(nbe.getMessage());
 			else
-				bot.sendMessageToChannel("NetworkBufferException was thrown, please contact an administrator now.");
+				bot.sendMessageToCoreChannel("NetworkBufferException was thrown, please contact an administrator now.");
 		} catch (NetworkPacketProcessException nppe) {
 			nppe.printStackTrace();
-			bot.sendMessageToChannel("Network exception: " + nppe.getMessage());
+			bot.sendMessageToCoreChannel("Network exception: " + nppe.getMessage());
 		} catch (Exception e) {
 			e.printStackTrace();
-			bot.sendMessageToChannel("Exception thrown, please contact an administrator now.");
+			bot.sendMessageToCoreChannel("Exception thrown, please contact an administrator now.");
 		}
 	}
 	
 	public void displayQueryResult(QueryResult queryResult) {
 		String queryOutput = ".host";
-		
+
 		if (queryResult.pwad_names != null)
 			queryOutput += " wads=" + queryResult.pwad_names;
-			
+
 		if (queryResult.gamemode != -1)
 			queryOutput += " gamemode=" + ServerQueryFlags.getGamemodeFromFlag(queryResult.gamemode);
-			
+
 		if (queryResult.instagib != -1)
-			if (queryResult.instagib == 0)
+			if (queryResult.instagib == 0) {
 				queryOutput += " instagib=off";
-			else {
+			} else {
 				queryOutput += " instagib=on";
 			}
 		if (queryResult.buckshot != -1)
-			if (queryResult.buckshot == 0)
+			if (queryResult.buckshot == 0) {
 				queryOutput += " buckshot=off";
-			else {
+			} else {
 				queryOutput += " buckshot=on";
 			}
 		if (queryResult.iwad != null)
@@ -282,7 +283,7 @@ public class QueryHandler extends Thread {
 		if (queryResult.compatflags2 != -1)
 			queryOutput += " compatflags2=" + queryResult.compatflags2;
 		
-		bot.sendMessageToChannel("Query complete: " + queryOutput);
+		bot.sendMessageToCoreChannel("Query complete: " + queryOutput);
 	}
 	
 	@Override
@@ -293,7 +294,7 @@ public class QueryHandler extends Thread {
 			IPAddress = InetAddress.getByName(request.getIP());
 		} catch (UnknownHostException e1) {
 			e1.printStackTrace();
-			bot.sendMessageToChannel("Error: Query IP address could not be resolved or is using IPv6.");
+			bot.sendMessageToCoreChannel("Error: Query IP address could not be resolved or is using IPv6.");
 			return;
 		}
 		int port = request.getPort();
@@ -324,19 +325,19 @@ public class QueryHandler extends Thread {
 			// Process it
 			processIncomingPacket(decodedData);	
 		} catch (UnknownHostException e) {
-			bot.sendMessageToChannel("IP of the host to query could not be determined. Please see if your IP is a valid address that can be reached.");
+			bot.sendMessageToCoreChannel("IP of the host to query could not be determined. Please see if your IP is a valid address that can be reached.");
 			e.printStackTrace();
 		} catch (SocketException e) {
-			bot.sendMessageToChannel("Error with the socket when handling query. Please try again or contact an administrator.");
+			bot.sendMessageToCoreChannel("Error with the socket when handling query. Please try again or contact an administrator.");
 			e.printStackTrace();
 		} catch (SocketTimeoutException e) {
-			bot.sendMessageToChannel("Socket timeout, IP is incorrect or server is down/unreachable (consider trying again if it is your first try).");
+			bot.sendMessageToCoreChannel("Socket timeout, IP is incorrect or server is down/unreachable (consider trying again if it is your first try).");
 			e.printStackTrace();
 		} catch (IOException e) {
-			bot.sendMessageToChannel("IOException from query. Please try again or contact an administrator.");
+			bot.sendMessageToCoreChannel("IOException from query. Please try again or contact an administrator.");
 			e.printStackTrace();
 		} catch (Exception e) {
-			bot.sendMessageToChannel("Unknown exception occured, contact an administrator now.");
+			bot.sendMessageToCoreChannel("Unknown exception occured, contact an administrator now.");
 			e.printStackTrace();
 		}
 		
