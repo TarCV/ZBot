@@ -23,7 +23,7 @@ with managing and setting up servers.
 
 ###With Gradle
 
-**You need JDK 11 to compile BestBot**
+**You need JDK 15 to compile BestBot**
 
 1. cd to the working directory
 2. type `./gradlew installDist` (or assembleDist to produce archived versions)
@@ -31,7 +31,7 @@ with managing and setting up servers.
 
 ##Configuration & Running
 
-**You need JRE 11 to run BestBot**
+**You need JRE 15 to run BestBot**
 
 1. Edit bestbot.ini and fill in your desired settings 
 2. Run the bot with `java -jar BestBot.jar bestbot.ini`

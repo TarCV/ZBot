@@ -1,5 +1,6 @@
 // --------------------------------------------------------------------------
 // Copyright (C) 2012-2013 Best-Ever
+// Copyright (C) 2021 TarCV
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -127,25 +128,6 @@ public class Functions {
 		for (byte b : bytes)
 			sb.append(String.format("%02x", b&0xff));
 		return sb.toString();
-	}
-
-	/**
-	 * Gets the name of a user by splitting their hostname (*.users.zandronum.com)
-	 * @param hostname The user's host name
-	 * @return username The user's actual IRC name
-	 */
-	public static String getUserName(String hostname) {
-		return hostname.replace(".users.zandronum.com", "");
-	}
-
-	/**
-	 * Checks to see if a user is logged on their Zandronum IRC account
-	 * @param hostname The user's hostname
-	 * @return username True if logged in, false if not
-	 */
-	public static boolean checkLoggedIn(String hostname) {
-		hostname = hostname.replace(".users.zandronum.com", "");
-		return !hostname.contains(".");
 	}
 
 	/**
