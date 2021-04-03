@@ -35,49 +35,14 @@ public class ConfigData {
 	public String filepath;
 
 	/**
-	 * The name of the irc bot
-	 */
-	public String irc_name;
-
-	/**
-	 * The username of the irc bot
-	 */
-	public String irc_user;
-
-	/**
-	 * The version of the irc bot
-	 */
-	public String irc_version;
-
-	/**
-	 * The network it will connect to
-	 */
-	public String irc_network;
-
-	/**
 	 * The channel it will connect to
 	 */
-	public String irc_channel;
-
-	/**
-	 * The port to which to connect with IRC
-	 */
-	public int irc_port;
+	public String discord_channel;
 
 	/**
 	 * The password to connect to IRC with
 	 */
-	public String irc_pass;
-
-	/**
-	 * The IRC hostname mask (default: .users.zandronum.com)
-	 */
-	public String irc_mask;
-
-    /**
-     * Allow relaying server messages that begin with !irc to the IRC channel?
-     */
-    public boolean irc_relay;
+	public String discord_token;
 
 	/**
 	 * The mysql host
@@ -298,17 +263,9 @@ public class ConfigData {
 
 		// Load the IRC section
 		Profile.Section discord = ini.get("discord");
-		this.irc_channel = discord.get("channel");
-		this.irc_name = discord.get("name");
-		this.irc_user = discord.get("user");
-		this.irc_version = discord.get("version");
-		this.irc_network = discord.get("network");
-		this.irc_pass = discord.get("pass");
-		this.irc_port = Integer.parseInt(discord.get("port"));
-		this.irc_mask = discord.get("hostmask");
+		this.discord_channel = discord.get("channel");
+		this.discord_token = discord.get("token");
         this.log_channel = discord.get("logchannel");
-		if (discord.get("irc_relay") != null)
-			this.irc_relay = Boolean.parseBoolean(discord.get("irc_relay"));
 
 		// Load the MYSQL section
 		Profile.Section mysql = ini.get("mysql");

@@ -76,7 +76,7 @@ public class IPIntel implements Runnable {
 			if (response >= minResult) {
 				source.bot.sendLogErrorMessage(bold(name)+" with ip "+bold(ip)+" was kicked from " + bold(source.sender) + "'s server "+ bold(source.servername) +" on port "+bold(source.port)+" as they're suspected of being behind a proxy");
 				source.in.println("addban " + ip + " 10minute " + "\"\\ciBanned from all " + source.bot.cfg_data.service_short + " servers on suspicion of using a proxy.\"");
-				if (MySQL.addBan(ip, "Proxy (IPIntel)", source.bot.cfg_data.irc_name)) {
+				if (MySQL.addBan(ip, "Proxy (IPIntel)", "<bot>")) {
 					source.bot.sendLogInfoMessage("Proxy IP " + bold(ip) + " was added to the banlist");
 				}
 				else { 

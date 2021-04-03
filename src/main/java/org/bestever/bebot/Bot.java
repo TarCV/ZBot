@@ -180,9 +180,9 @@ public class Bot {
 		queryManager.start();
 
 		// Set up the bot and join the channel
-		logMessage(LOGLEVEL_IMPORTANT, "Initializing ZBot v" + cfg_data.irc_version);
+		logMessage(LOGLEVEL_IMPORTANT, "Initializing ZBot");
 
-		final CatnipOptions options = new CatnipOptions(cfg_data.irc_pass);
+		final CatnipOptions options = new CatnipOptions(cfg_data.discord_token);
 		{
 			final HashSet<GatewayIntent> gatewayIntents = new HashSet<>();
 			gatewayIntents.addAll(GatewayIntent.UNPRIVILEGED_INTENTS);
@@ -367,6 +367,7 @@ public class Bot {
 		return serverList;
 	}
 	
+	@Nullable
 	public List<Server> getAllServers() {
 		if (servers == null || servers.isEmpty())
 			return null;
@@ -522,7 +523,7 @@ public class Bot {
 							args = "\""+args+"\"";
 						}
 						{
-							s.in.flush(); s.in.println("echo \"-> " + command + " " + Functions.escapeQuotes(args) + " (RCON by " + hostname + " - " + cfg_data.irc_name + ")\";\n");
+							s.in.flush(); s.in.println("echo \"-> " + command + " " + Functions.escapeQuotes(args) + " (RCON by " + hostname + ")\";\n");
 							s.in.flush(); s.in.println(command + " " + args + ";\n");
 						}
 						channel.sendMessage("Command '"+thisMessage+"' sent.");
@@ -569,7 +570,7 @@ public class Bot {
 						args = "\""+args+"\"";
 					}
 					for (Server s : servers) {
-						s.in.flush(); s.in.println("echo \"-> " + command + " " + Functions.escapeQuotes(args) + " (RCON by " + sender + " - " + cfg_data.irc_name + ")\";\n");
+						s.in.flush(); s.in.println("echo \"-> " + command + " " + Functions.escapeQuotes(args) + " (RCON by " + sender + ")\";\n");
 						s.in.flush(); s.in.println(command + " " + args + ";\n");
 					}
 					channel.sendMessage("Command '"+thisMessage+"' sent to all servers.");
@@ -691,6 +692,7 @@ public class Bot {
 					case ".logfile":
 					case ".passwords":
 						channel.sendMessage("Sorry, I'm not allowed to speak to you");
+						break;
 					default:
 						break;
 				}
@@ -933,7 +935,7 @@ public class Bot {
 					if (keywords.length == 2)
 						MySQL.changePassword(member.id(), keywords[1], channel);
 					else
-						channel.sendMessage("Incorrect syntax! Usage is: /msg " + cfg_data.irc_name + " changepw <new_password>");
+						channel.sendMessage("Incorrect syntax! Usage is: /msg " + " changepw <new_password>");
 					break;
 				case ".getinfo":
 					processServerInfo(userLevel, keywords, channel, member);
@@ -1079,7 +1081,7 @@ public class Bot {
 		else {
 			String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
 
-			final Optional<GuildChannel> targetChannel = channelByName(cfg_data.irc_channel);
+			final Optional<GuildChannel> targetChannel = channelByName(cfg_data.discord_channel);
 			targetChannel.ifPresent(ch -> ch.asMessageChannel().sendMessage(message));
 		}
 	}
@@ -1276,7 +1278,9 @@ public class Bot {
 	private void processKillMine(Member hostname, MessageChannel channel) {
 		logMessage(LOGLEVEL_TRIVIAL, "Processing killmine.");
 		List<Server> servers = getUserServers(hostname.id());
-		if (servers != null) {
+		if (servers.isEmpty()) {
+			channel.sendMessage("There are no servers running.");
+		} else {
 			ArrayList<String> ports = new ArrayList<>();
 			for (Server s : servers) {
 				s.auto_restart = false;
@@ -1294,8 +1298,6 @@ public class Bot {
 			else {
 				channel.sendMessage("You do not have any servers running.");
 			}
-		} else {
-			channel.sendMessage("There are no servers running.");
 		}
 	}
 
@@ -1483,7 +1485,7 @@ public class Bot {
 		logMessage(LOGLEVEL_NORMAL, "Getting a list of servers.");
 		if (keywords.length == 2) {
 			List<Server> servers = getUserServers(keywords[1]);
-			if (servers != null && servers.size() > 0) {
+			if (!servers.isEmpty()) {
 				for (Server server : servers) {
 					channel.sendMessage( server.port + ": \"" + server.servername + ((server.wads != null) ?
 					"\" with wads " + Functions.implode(server.wads, ", ") : ""));
@@ -1504,7 +1506,7 @@ public class Bot {
 	 * @param msg The message to deploy
 	 */
 	public void sendMessageToCoreChannel(String msg) {
-		final Optional<GuildChannel> guildChannel = channelByName(cfg_data.irc_channel);
+		final Optional<GuildChannel> guildChannel = channelByName(cfg_data.discord_channel);
 		guildChannel.ifPresentOrElse(
 				ch -> ch.asMessageChannel().sendMessage(msg),
 				() -> System.out.println("Can't get core channel")

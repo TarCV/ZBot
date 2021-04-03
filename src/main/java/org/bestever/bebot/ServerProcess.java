@@ -365,7 +365,7 @@ public class ServerProcess extends Thread {
 //							MySQL.addServerToRecovery(server);
 						server.bot.sendLogServerMessage(bold(server.sender) + "'s server '" + server.servername + "' has been assigned port " + bold(""+server.port));
 						server.bot.sendMessage(server.channel, "Server '" + server.servername + "' started successfully on port " + server.port + "! zds://" + server.address + "/za");
-						server.bot.sendMessage(server.channel, "Server '" + server.servername + "' started successfully on port " + server.port + "! - To kill your server, in the channel " + server.bot.cfg_data.irc_channel + ", type .kill " + server.port);
+						server.bot.sendMessage(server.channel, "Server '" + server.servername + "' started successfully on port " + server.port + "! - To kill your server, in the channel " + server.bot.cfg_data.discord_channel + ", type .kill " + server.port);
 						server.bot.sendMessage(server.channel, "Your unique server ID is: " + server.server_id + ". You can view your logfile at " + server.bot.cfg_data.static_link + "/logs/" + server.server_id + ".txt");
 						server.bot.sendMessage(server.channel, "Your RCON password is "+server.rcon_password+". Your server's connect and join passwords are "+server.server_password+" if you have either of those enabled.");
 					}
