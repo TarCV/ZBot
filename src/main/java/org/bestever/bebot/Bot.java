@@ -48,6 +48,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -68,7 +69,7 @@ import static org.bestever.bebot.Logger.logMessage;
 /**
  * This is where the bot methods are run and handling of channel/PM input are processed
  */
-public class Bot {
+public class Bot implements ServerManager {
 
 	private final Catnip catnip;
 
@@ -239,6 +240,7 @@ public class Bot {
 	 * Gets the minimum port to be used by the bot
 	 * @return An integer containing the minimum port used
 	 */
+	@Override
 	public int getMinPort() {
 		return min_port;
 	}
@@ -247,6 +249,7 @@ public class Bot {
 	 * Returns the max port used by the bot
 	 * @return An integer containing the max port used
 	 */
+	@Override
 	public int getMaxPort() {
 		return max_port;
 	}
@@ -312,6 +315,7 @@ public class Bot {
 	 * This function goes through the linkedlist of servers and removes servers
 	 * @param server Server - the server object
 	 */
+	@Override
 	public void removeServerFromLinkedList(Server server) {
 		logMessage(LOGLEVEL_DEBUG, "Removing server from linked list.");
 		if (servers == null || servers.isEmpty())
@@ -331,6 +335,7 @@ public class Bot {
 	 * @param port The port to check
 	 * @return The server object reference if it exists, null if there's no such object
 	 */
+	@Override
 	public Server getServer(int port) {
 		logMessage(LOGLEVEL_TRIVIAL, "Getting server at port " + port + ".");
 		if (servers == null || servers.isEmpty())
@@ -350,6 +355,7 @@ public class Bot {
 	 * @param userId their IRC username
 	 * @return a list of server objects
 	 */
+	@Override
 	@Nonnull
 	public List<Server> getUserServers(String userId) {
 		logMessage(LOGLEVEL_DEBUG, "Getting all servers from " + userId + ".");
@@ -367,6 +373,7 @@ public class Bot {
 		return serverList;
 	}
 	
+	@Override
 	@Nullable
 	public List<Server> getAllServers() {
 		if (servers == null || servers.isEmpty())
@@ -381,6 +388,22 @@ public class Bot {
 		return serverList;
 	}
 
+	@Override
+	public void addToLinkedList(Server server) {
+		servers.add(server);
+
+		try {
+			vSHashmap.get(server.version.name).add(server);
+		} catch (Exception e) {
+			if (server.recovering)
+				System.out.println(server.sender+"'s server '" + server.servername + "' with UUID " + server.server_id + " was unable to be added to the versions list");
+			else {
+				sendLogErrorMessage(bold(server.sender) + "'s server with UUID "+bold(server.server_id)+" was unable to be added to the versions list");
+			}
+			e.printStackTrace();
+		}
+	}
+
 	/**
 	 * This searches through the linkedlist to kill the server on that port,
 	 * the method does not actually kill it, but signals a boolean to terminate
@@ -391,7 +414,7 @@ public class Bot {
 	private void killServer(String portString, Member sender, MessageChannel channel) {
 		logMessage(LOGLEVEL_NORMAL, "Killing server on port " + portString + ".");
 		// Ensure it is a valid port
-		if (!Functions.isNumeric(portString)) {
+		if (!Functions.isInteger(portString)) {
 			channel.sendMessage("Invalid port number (" + portString + "), not terminating server.");
 			return;
 		}
@@ -455,7 +478,7 @@ public class Bot {
 	 */
 	private void protectServer(String[] keywords, MessageChannel channel) {
 		if (keywords.length == 2) {
-			if (Functions.isNumeric(keywords[1])) {
+			if (Functions.isInteger(keywords[1])) {
 				Server s = getServer(Integer.parseInt(keywords[1]));
 				if (s.protected_server) {
 					s.protected_server = false;
@@ -479,7 +502,7 @@ public class Bot {
 	private void globalBroadcast(String[] keywords, Member sender, MessageChannel channel) {
 		if (keywords.length > 1) {
 			if (servers != null) {
-				String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
+				String message = String.join(" ", Arrays.copyOfRange(keywords, 1, keywords.length));
 				for (Server s : servers) {
 					s.in.flush(); s.in.println("say \"\\cf--------------\\cc\";\n");
 					s.in.flush(); s.in.println("say \"GLOBAL ANNOUNCEMENT: " + Functions.escapeQuotes(message) + "\";\n");
@@ -503,18 +526,18 @@ public class Bot {
 	 */
 	private void sendCommand(AccountType level, String[] keywords, Member hostname, MessageChannel channel) {
 		if (keywords.length > 2) {
-			if (Functions.isNumeric(keywords[1])) {
+			if (Functions.isInteger(keywords[1])) {
 				int port = Integer.parseInt(keywords[1]);
 				Server s = getServer(port);
 				if (s != null) {
 					boolean isHoster = s.userId.equals(hostname.id());
 					if (isHoster || isAccountTypeOf(level, MODERATOR)) {
-						String entireMessage = Functions.implode(Arrays.copyOfRange(keywords, 2, keywords.length), " ");
+						String entireMessage = String.join(" ", Arrays.copyOfRange(keywords, 2, keywords.length));
 						String thisMessage = entireMessage.split(";")[0]; // Only send the first message because stacked messages break somehow.. :/
 						thisMessage = thisMessage.replaceAll("^\\s+","");
 						String[] thisKeywords = thisMessage.split(" ");
 						String command = thisKeywords[0];
-						String args = Functions.implode(Arrays.copyOfRange(thisKeywords, 1, thisKeywords.length), " ");
+						String args = String.join(" ", Arrays.copyOfRange(thisKeywords, 1, thisKeywords.length));
 						if (command.equalsIgnoreCase("sv_hostname")) {
 							args = args.replace("$brand",cfg_data.bot_hostname_base);
 						}
@@ -555,12 +578,12 @@ public class Bot {
 	private void sendCommandAll(String[] keywords, Member sender, MessageChannel channel) {
 		if (keywords.length > 1) {
 			if (servers != null) {
-				String entireMessage = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
+				String entireMessage = String.join(" ", Arrays.copyOfRange(keywords, 1, keywords.length));
 				String thisMessage = entireMessage.split(";")[0]; // Only send the first message because stacked messages break somehow.. :/
 				thisMessage = thisMessage.replaceAll("^\\s+","");
 				String[] thisKeywords = thisMessage.split(" ");
 				String command = thisKeywords[0];
-				String args = Functions.implode(Arrays.copyOfRange(thisKeywords, 1, thisKeywords.length), " ");
+				String args = String.join(" ", Arrays.copyOfRange(thisKeywords, 1, thisKeywords.length));
 				if (!args.equals("") && (command.equalsIgnoreCase("sv_hostname") || command.equalsIgnoreCase("sv_website") || command.equalsIgnoreCase("logfile"))) {
 					channel.sendMessage("Error: Command " + command + " is not allowed to be sent to all servers");
 				}
@@ -593,290 +616,292 @@ public class Bot {
 		final MessageChannel channel = msg.channel().blockingGet();
 		assert channel != null;
 
-		if (channel.isDM()) {
-			onPrivateMessage(msg);
-			return;
-		}
-
-		// Perform these only if the message starts with a period (to save processing time on trivial chat)
-		if (message.startsWith(".")) {
-			// Generate an array of keywords from the message
-			String[] keywords = message.split(" ");
-
-			// Perform function based on input (note: login is handled by the MySQL function/class); also mostly in alphabetical order for convenience
-			final AccountType userLevel = getRole(member);
-			switch (keywords[0].toLowerCase()) {
-				case ".commands":
-					channel.sendMessage(processCommands(userLevel));
-					break;
-				case ".file":
-					processFile(keywords, channel);
-					break;
-				case ".get":
-					processGet(keywords, channel);
-					break;
-				case ".help":
-					channel.sendMessage(Objects.requireNonNullElse(cfg_data.bot_help, "Error: No help available."));
-					break;
-				case ".owner":
-					processOwner(keywords, channel);
-					break;
-				case ".servers":
-					processServers(keywords, channel);
-					break;
-				case ".uptime":
-					if (keywords.length == 1)
-						channel.sendMessage("I have been running for " + Functions.calculateTime(System.currentTimeMillis() - time_started));
-					else
-						calculateUptime(keywords[1], channel);
-					break;
-				case ".liststartwads":
-					channel.sendMessage("These wads are automatically loaded when a server is started: " + Functions.implode(cfg_data.bot_extra_wads, ", "));
-					break;
-				case ".versions":
-					for (Version v : versionParser.list)
-						channel.sendMessage(String.format("%s %s - %s", v.name, (v.isDefault ? "(default)" : ""), v.description));
-					break;
-				default:
-					break;
+		try {
+			if (channel.isDM()) {
+				onPrivateMessage(msg);
+				return;
 			}
-			if (isAccountTypeOf(userLevel, REGISTERED)) {
+
+			// Perform these only if the message starts with a period (to save processing time on trivial chat)
+			if (message.startsWith(".")) {
+				// Generate an array of keywords from the message
+				String[] keywords = message.split(" ");
+
+				// Perform function based on input (note: login is handled by the MySQL function/class); also mostly in alphabetical order for convenience
+				final AccountType userLevel = getRole(member);
 				switch (keywords[0].toLowerCase()) {
-					case ".getinfo":
-						processServerInfo(userLevel, keywords, channel, member);
+					case ".commands":
+						channel.sendMessage(processCommands(userLevel));
 						break;
-					case ".host":
-						processHost(userLevel, channel, member.id(), message, getMinPort());
+					case ".file":
+						processFile(keywords, channel);
 						break;
-					case ".kill":
-						processKill(userLevel, keywords, member, channel, channel);
+					case ".get":
+						processGet(keywords, channel);
 						break;
-					case ".killmine":
-						processKillMine(member, channel);
+					case ".help":
+						channel.sendMessage(Objects.requireNonNullElse(cfg_data.bot_help, "Error: No help available."));
 						break;
-					case ".load":
-						MySQL.loadSlot(member.id(), keywords, userLevel, channel);
+					case ".owner":
+						processOwner(keywords, channel);
 						break;
-					case ".save":
-						channel.sendMessage("Please update slots at " + cfg_data.website_link + "/account");
+					case ".servers":
+						processServers(keywords, channel);
+						break;
+					case ".uptime":
+						if (keywords.length == 1)
+							channel.sendMessage("I have been running for " + Functions.calculateTime(System.currentTimeMillis() - time_started));
+						else
+							calculateUptime(keywords[1], channel);
+						break;
+					case ".liststartwads":
+						channel.sendMessage("These wads are automatically loaded when a server is started: " + String.join(", ", cfg_data.bot_extra_wads));
+						break;
+					case ".versions":
+						for (Version v : versionParser.list)
+							channel.sendMessage(String.format("%s %s - %s", v.name, (v.isDefault ? "(default)" : ""), v.description));
+						break;
+					default:
+						break;
+				}
+				if (isAccountTypeOf(userLevel, REGISTERED)) {
+					switch (keywords[0].toLowerCase()) {
+						case ".getinfo":
+							processServerInfo(userLevel, keywords, channel, member);
+							break;
+						case ".host":
+							processHost(userLevel, channel, member.id(), message.substring(".host".length()), getMinPort());
+							break;
+						case ".kill":
+							processKill(userLevel, keywords, member, channel, channel);
+							break;
+						case ".killmine":
+							processKillMine(member, channel);
+							break;
+						case ".load":
+							MySQL.loadSlot(member.id(), keywords, userLevel, channel);
+							break;
+						case ".save":
+							channel.sendMessage("Please update slots at " + cfg_data.website_link + "/account");
 //						MySQL.saveSlot(hostname, keywords);
-						break;
-					case ".slot":
-						MySQL.showSlot(member.id(), keywords, channel);
-						break;
+							break;
+						case ".slot":
+							MySQL.showSlot(member.id(), keywords, channel);
+							break;
 //					case ".query":
 //						handleQuery(keywords);
 //						break;
-					case ".send":
-						sendCommand(userLevel, keywords, member, channel);
-						break;
-					case ".rcon":
-					case ".logfile":
-					case ".passwords":
-						channel.sendMessage("Please use .getinfo <port> instead");
-						break;
-					default:
-						break;
-				}
-			} else {
-				switch (keywords[0].toLowerCase()) {
-					case ".getinfo":
-					case ".host":
-					case ".kill":
-					case ".killmine":
-					case ".load":
+						case ".send":
+							sendCommand(userLevel, keywords, member, channel);
+							break;
+						case ".rcon":
+						case ".logfile":
+						case ".passwords":
+							channel.sendMessage("Please use .getinfo <port> instead");
+							break;
+						default:
+							break;
+					}
+				} else {
+					switch (keywords[0].toLowerCase()) {
+						case ".getinfo":
+						case ".host":
+						case ".kill":
+						case ".killmine":
+						case ".load":
 //					case ".query":
-					case ".save":
-					case ".slot":
-					case ".rcon":
-					case ".logfile":
-					case ".passwords":
-						channel.sendMessage("Sorry, I'm not allowed to speak to you");
-						break;
-					default:
-						break;
+						case ".save":
+						case ".slot":
+						case ".rcon":
+						case ".logfile":
+						case ".passwords":
+							channel.sendMessage("Sorry, I'm not allowed to speak to you");
+							break;
+						default:
+							break;
+					}
 				}
-			}
 
-			if (isAccountTypeOf(userLevel, VIP)) { // VIP
-				switch (keywords[0].toLowerCase()) {
+				if (isAccountTypeOf(userLevel, VIP)) { // VIP
+					switch (keywords[0].toLowerCase()) {
 //					case ".autorestart":
 //						toggleAutoRestart(keywords, channel);
 //						break;
-					case ".cpu":
-						try {
-							URL url;
-							if (keywords.length > 1 && keywords[1] != null && !keywords[1].isEmpty()) {
-								url = new URL("http://127.0.0.1/bot/cpu?port=" + keywords[1]);
+						case ".cpu":
+							try {
+								URL url;
+								if (keywords.length > 1 && keywords[1] != null && !keywords[1].isEmpty()) {
+									url = new URL("http://127.0.0.1/bot/cpu?port=" + keywords[1]);
+								} else {
+									url = new URL("http://127.0.0.1/bot/cpu");
+								}
+								URLConnection yc = url.openConnection();
+								BufferedReader in = new BufferedReader(new InputStreamReader(yc.getInputStream()));
+								String inputLine;
+								while ((inputLine = in.readLine()) != null) {
+									channel.sendMessage(inputLine);
+								}
+								in.close();
+							} catch (IOException e) {
+								System.out.println(e);
 							}
-							else {
-								url = new URL("http://127.0.0.1/bot/cpu");
+							break;
+						case ".mem":
+						case ".ram":
+							try {
+								URL url;
+								if (keywords.length > 1 && keywords[1] != null && !keywords[1].isEmpty()) {
+									url = new URL("http://127.0.0.1/bot/mem?port=" + keywords[1]);
+								} else {
+									url = new URL("http://127.0.0.1/bot/mem");
+								}
+								URLConnection yc = url.openConnection();
+								BufferedReader in = new BufferedReader(new InputStreamReader(yc.getInputStream()));
+								String inputLine;
+								while ((inputLine = in.readLine()) != null) {
+									channel.sendMessage(inputLine);
+								}
+								in.close();
+							} catch (IOException e) {
+								System.out.println(e);
 							}
-							URLConnection yc = url.openConnection();
-							BufferedReader in = new BufferedReader(new InputStreamReader(yc.getInputStream()));
-							String inputLine;
-							while ((inputLine = in.readLine()) != null) {
-								channel.sendMessage(inputLine);
-							}
-							in.close();
-						}
-						catch (IOException e) {
-							System.out.println(e);
-						}
-						break;
-					case ".mem":
-					case ".ram":
-						try {
-							URL url;
-							if (keywords.length > 1 && keywords[1] != null && !keywords[1].isEmpty()) {
-								url = new URL("http://127.0.0.1/bot/mem?port=" + keywords[1]);
-							}
-							else {
-								url = new URL("http://127.0.0.1/bot/mem");
-							}
-							URLConnection yc = url.openConnection();
-							BufferedReader in = new BufferedReader(new InputStreamReader(yc.getInputStream()));
-							String inputLine;
-							while ((inputLine = in.readLine()) != null) {
-								channel.sendMessage(inputLine);
-							}
-							in.close();
-						}
-						catch (IOException e) {
-							System.out.println(e);
-						}
-						break;
-					case ".protect":
-						protectServer(keywords, channel);
-						break;
-					default:
-						break;
-				}
-			} else {
-				switch (keywords[0].toLowerCase()) {
+							break;
+						case ".protect":
+							protectServer(keywords, channel);
+							break;
+						default:
+							break;
+					}
+				} else {
+					switch (keywords[0].toLowerCase()) {
 //					case ".autorestart":
-					case ".cpu":
-					case ".mem":
-					case ".protect":
-						channel.sendMessage("Error: You do not have permission to use that command!");
-						break;
-					default:
-						break;
+						case ".cpu":
+						case ".mem":
+						case ".protect":
+							channel.sendMessage("Error: You do not have permission to use that command!");
+							break;
+						default:
+							break;
+					}
+				}
+
+				if (isAccountTypeOf(userLevel, MODERATOR)) { // MODERATOR
+					switch (keywords[0].toLowerCase()) {
+						case ".broadcast":
+							globalBroadcast(keywords, member, channel);
+							break;
+						case ".killinactive":
+							processKillInactive(keywords, member, channel);
+							break;
+						default:
+							break;
+					}
+				} else {
+					switch (keywords[0].toLowerCase()) {
+						case ".broadcast":
+						case ".killinactive":
+							channel.sendMessage("Error: You do not have permission to use that command!");
+							break;
+						default:
+							break;
+					}
+				}
+
+				if (isAccountTypeOf(userLevel, ADMIN)) {
+					switch (keywords[0].toLowerCase()) {
+						case ".killall":
+							processKillAll(member, channel);
+							break;
+						case ".killversion":
+							processKillVersion(keywords, member, channel);
+							break;
+						case ".notice":
+							setNotice(keywords, userLevel, channel);
+							sendLogAdminMessage(bold(userInfo(member)) + " sets notice to " + String.join(" ", Arrays.copyOfRange(keywords, 1, keywords.length)));
+							break;
+						case ".off":
+							processOff(member, channel);
+							break;
+						case ".on":
+							processOn(member, channel);
+							break;
+						case ".reloadconfig":
+							reloadConfigFile();
+							channel.sendMessage("Configuration file has been successfully reloaded.");
+							sendLogAdminMessage(bold(userInfo(member)) + " reloaded the config file");
+							break;
+						case ".reloadversions":
+							versionParser.load();
+							channel.sendMessage("Versions file has been successfully reloaded.");
+							sendLogAdminMessage(bold(userInfo(member)) + " reloaded the zandronum versions");
+							break;
+						case ".sendall":
+							sendCommandAll(keywords, member, channel);
+							break;
+						case ".debug":
+							debugMode = !debugMode;
+							channel.sendMessage("Debug mode is now " + (debugMode ? "en" : "dis") + "abled.");
+							sendLogAdminMessage(bold(userInfo(member)) + " " + (debugMode ? "en" : "dis") + "abled debug mode");
+							break;
+						case ".ipintel":
+							cfg_data.ipintel_enabled = !cfg_data.ipintel_enabled;
+							channel.sendMessage("IPIntel is now " + (cfg_data.ipintel_enabled ? "en" : "dis") + "abled.");
+							sendLogAdminMessage(bold(userInfo(member)) + " " + (cfg_data.ipintel_enabled ? "en" : "dis") + "abled IPIntel checking");
+							break;
+						case ".clearrecovery":
+							if (MySQL.clearRecovery()) {
+								channel.sendMessage("Recovery cleared");
+								sendLogAdminMessage(bold(userInfo(member)) + " cleared the recovery");
+							} else {
+								channel.sendMessage("Failed to clear recovery");
+							}
+							break;
+						case ".updaterecovery":
+							int added = 0;
+							List<Server> servers = getAllServers();
+							if (servers != null && servers.size() > 0)
+								for (Server server : servers)
+									if (!MySQL.serverInRecovery(server.server_id))
+										if (MySQL.addServerToRecovery(server))
+											added++;
+
+							if (added != 0) {
+								channel.sendMessage("Added " + added + " servers to recovery");
+								sendLogAdminMessage("**" + userInfo(member) + "** updated the recovery (+" + added + " servers)");
+							} else {
+								channel.sendMessage("No servers to add to recovery");
+							}
+							break;
+						default:
+							break;
+					}
+				} else {
+					switch (keywords[0].toLowerCase()) {
+						case ".debug":
+						case ".ipintel":
+						case ".killall":
+						case ".killversion":
+						case ".notice":
+						case ".off":
+						case ".on":
+						case ".reloadconfig":
+						case ".reloadversions":
+						case ".clearrecovery":
+						case ".updaterecovery":
+						case ".sendall":
+							channel.sendMessage("Error: You do not have permission to use that command!");
+							break;
+						default:
+							break;
+					}
 				}
 			}
-
-			if (isAccountTypeOf(userLevel, MODERATOR)) { // MODERATOR
-				switch (keywords[0].toLowerCase()) {
-					case ".broadcast":
-						globalBroadcast(keywords, member, channel);
-						break;
-					case ".killinactive":
-						processKillInactive(keywords, member, channel);
-						break;
-					default:
-						break;
-				}
-			} else {
-				switch (keywords[0].toLowerCase()) {
-					case ".broadcast":
-					case ".killinactive":
-						channel.sendMessage("Error: You do not have permission to use that command!");
-						break;
-					default:
-						break;
-				}
-			}
-
-			if (isAccountTypeOf(userLevel, ADMIN)) {
-				switch (keywords[0].toLowerCase()) {
-					case ".killall":
-						processKillAll(member, channel);
-						break;
-					case ".killversion":
-						processKillVersion(keywords, member, channel);
-						break;
-					case ".notice":
-						setNotice(keywords, userLevel, channel);
-						sendLogAdminMessage(bold(userInfo(member)) + " sets notice to " + Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
-						break;
-					case ".off":
-						processOff(member, channel);
-						break;
-					case ".on":
-						processOn(member, channel);
-						break;
-					case ".reloadconfig":
-						reloadConfigFile();
-						channel.sendMessage("Configuration file has been successfully reloaded.");
-						sendLogAdminMessage(bold(userInfo(member)) + " reloaded the config file");
-						break;
-					case ".reloadversions":
-						versionParser.load();
-						channel.sendMessage("Versions file has been successfully reloaded.");
-						sendLogAdminMessage(bold(userInfo(member)) + " reloaded the zandronum versions");
-						break;
-					case ".sendall":
-						sendCommandAll(keywords, member, channel);
-						break;
-					case ".debug":
-						debugMode = !debugMode;
-						channel.sendMessage("Debug mode is now " + (debugMode ? "en" : "dis") + "abled.");
-						sendLogAdminMessage(bold(userInfo(member)) + " " + (debugMode ? "en" : "dis") + "abled debug mode");
-						break;
-					case ".ipintel":
-						cfg_data.ipintel_enabled = !cfg_data.ipintel_enabled;
-						channel.sendMessage("IPIntel is now " + (cfg_data.ipintel_enabled ? "en" : "dis") + "abled.");
-						sendLogAdminMessage(bold(userInfo(member)) + " " + (cfg_data.ipintel_enabled ? "en" : "dis") + "abled IPIntel checking");
-						break;
-					case ".clearrecovery":
-						if (MySQL.clearRecovery()) {
-							channel.sendMessage("Recovery cleared");
-							sendLogAdminMessage(bold(userInfo(member)) + " cleared the recovery");
-						}
-						else {
-							channel.sendMessage("Failed to clear recovery");
-						}
-						break;
-					case ".updaterecovery":
-						int added = 0;
-						List<Server> servers = getAllServers();
-						if (servers != null && servers.size() > 0)
-							for (Server server : servers)
-								if (!MySQL.serverInRecovery(server.server_id))
-									if (MySQL.addServerToRecovery(server))
-										added++;
-
-						if (added != 0) {
-							channel.sendMessage("Added " + added + " servers to recovery");
-							sendLogAdminMessage("**" + userInfo(member) + "** updated the recovery (+"+added+" servers)");
-						}
-						else {
-							channel.sendMessage("No servers to add to recovery");
-						}
-						break;
-					default:
-						break;
-				}
-			} else {
-				switch (keywords[0].toLowerCase()) {
-					case ".debug":
-					case ".ipintel":
-					case ".killall":
-					case ".killversion":
-					case ".notice":
-					case ".off":
-					case ".on":
-					case ".reloadconfig":
-					case ".reloadversions":
-					case ".clearrecovery":
-					case ".updaterecovery":
-					case ".sendall":
-						channel.sendMessage("Error: You do not have permission to use that command!");
-						break;
-					default:
-						break;
-				}
-			}
+		} catch (InputException e) {
+			channel.sendMessage(e.getMessage());
+		} catch (Exception e) {
+			channel.sendMessage("Got some unexpected error.");
+			sendLogErrorMessage(e.getMessage());
+			e.printStackTrace();
 		}
 	}
 
@@ -972,18 +997,18 @@ public class Bot {
 			switch (keywords[0].toLowerCase()) {
 				case ".addstartwad":
 					if (keywords.length > 1)
-						addExtraWad(Functions.implode(Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length), " "), member, channel);
+						addExtraWad(String.join(" ", Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length)), member, channel);
 					break;
 				case ".delstartwad":
 					if (keywords.length > 1)
-						deleteExtraWad(Functions.implode(Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length), " "), member, channel);
+						deleteExtraWad(String.join(" ", Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length)), member, channel);
 					break;
 				case ".msg":
 					messageChannel(keywords, channel);
 					sendLogAdminMessage("**" + userInfo(member) + "** sent message: **" + message.substring(message.indexOf(' ')+1));
 					break;
 				case ".action":
-					channel.sendMessage("/me " + Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " "));
+					channel.sendMessage("/me " + String.join(" ", Arrays.copyOfRange(keywords, 1, keywords.length)));
 					sendLogAdminMessage("**" + userInfo(member) + "** sent action: " + bold(message.substring(message.indexOf(' ')+1)));
 					break;
 				default:
@@ -1035,7 +1060,7 @@ public class Bot {
 	 * @param channel
 	 */
 	public void calculateUptime(String port, MessageChannel channel) {
-		if (Functions.isNumeric(port)) {
+		if (Functions.isInteger(port)) {
 			int portValue = Integer.valueOf(port);
 			Server s = getServer(portValue);
 			if (s != null) {
@@ -1063,7 +1088,7 @@ public class Bot {
 			return;
 		}
 		if (isAccountTypeOf(userLevel, ADMIN)) {
-			cfg_data.bot_notice = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
+			cfg_data.bot_notice = String.join(" ", Arrays.copyOfRange(keywords, 1, keywords.length));
 			channel.sendMessage("New notice has been set.");
 		}
 		else
@@ -1079,7 +1104,7 @@ public class Bot {
 		if (keywords.length < 2 || !channel.isGuild())
 			channel.sendMessage("Incorrect syntax! Correct usage is .msg your_message");
 		else {
-			String message = Functions.implode(Arrays.copyOfRange(keywords, 1, keywords.length), " ");
+			String message = String.join(" ", Arrays.copyOfRange(keywords, 1, keywords.length));
 
 			final Optional<GuildChannel> targetChannel = channelByName(cfg_data.discord_channel);
 			targetChannel.ifPresent(ch -> ch.asMessageChannel().sendMessage(message));
@@ -1114,7 +1139,7 @@ public class Bot {
 			channel.sendMessage("Proper syntax: .get <port> <property>");
 			return;
 		}
-		if (!Functions.isNumeric(keywords[1])) {
+		if (!Functions.isInteger(keywords[1])) {
 			channel.sendMessage("Port is not a valid number");
 			return;
 		}
@@ -1133,19 +1158,46 @@ public class Bot {
 	 * @param hostname IRC data associated with the sender
 	 * @param message The entire message to be processed
 	 */
-	public void processHost(AccountType userLevel, MessageChannel channel, String hostname, String message, int port) {
+	public void processHost(AccountType userLevel, MessageChannel channel, String hostname, String message, int port) throws InputException {
 		logMessage(LOGLEVEL_NORMAL, "Processing the host command for " + hostname + " with the message \"" + message + "\".");
 		if (botEnabled || isAccountTypeOf(userLevel, ADMIN)) {
 			boolean autoRestart = (message.contains("autorestart=true") || message.contains("autorestart=on"));
 			int slots = MySQL.getMaxSlots(hostname);
 			int userServers = getUserServers(hostname).size();
-			if (slots > userServers)
-				Server.handleHostCommand(this, servers, channel, hostname, message, userLevel, autoRestart, port, null, false);
-			else
+			if (slots > userServers) {
+				final Map<String, String> arguments = new KeyValueParser(message).parse();
+				Server.handleHostCommand(
+						toMessageReceiver(channel),
+						this,
+						cfg_data,
+						versionParser,
+						channel,
+						hostname,
+						arguments,
+						userLevel,
+						autoRestart,
+						port,
+						null,
+						false);
+			} else
 				channel.sendMessage("You have reached your server limit (" + slots + ")");
 		}
 		else
 			channel.sendMessage("The bot is currently disabled from hosting for the time being. Sorry for any inconvenience!");
+	}
+
+	private MessageReceiver toMessageReceiver(MessageChannel channel) {
+		return new MessageReceiver() {
+			@Override
+			public void onMessage(String message) {
+				Bot.this.sendMessage(channel, message);
+			}
+
+			@Override
+			public void onError(String message) {
+				Bot.this.sendMessage(channel, message);
+			}
+		};
 	}
 
 	/**
@@ -1178,7 +1230,7 @@ public class Bot {
 
 		// Registered can only kill their own servers
 		if (isAccountTypeOf(userLevel, REGISTERED)) {
-			if (Functions.isNumeric(keywords[1])) {
+			if (Functions.isInteger(keywords[1])) {
 				Server server = getServer(Integer.parseInt(keywords[1]));
 				if (server != null) {
 					if (server.userId.equalsIgnoreCase(hostname.id()) || isAccountTypeOf(userLevel, MODERATOR))
@@ -1290,8 +1342,8 @@ public class Bot {
 				ports.add(String.valueOf(s.port));
 			}
 			if (!ports.isEmpty()) {
-				sendLogUserMessage(Functions.pluralize("%s Killed their %d server{s} (%s)".formatted(bold(userInfo(hostname)), ports.size(), Functions.implode(ports, ", ")), ports.size()));
-				channel.sendMessage(Functions.pluralize("Killed your %d server{s} (%s)".formatted(ports.size(), Functions.implode(ports, ", ")), ports.size()));
+				sendLogUserMessage(Functions.pluralize("%s Killed their %d server{s} (%s)".formatted(bold(userInfo(hostname)), ports.size(), String.join(", ", ports)), ports.size()));
+				channel.sendMessage(Functions.pluralize("Killed your %d server{s} (%s)".formatted(ports.size(), String.join(", ", ports)), ports.size()));
 				//if (channel != cfg_data.irc_channel)
 				//	sendMessage(cfg_data.irc_channel, Functions.pluralize(sender + " killed their " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") +")", ports.size()));
 			}
@@ -1313,7 +1365,7 @@ public class Bot {
 			channel.sendMessage("Proper syntax: .killinactive <days since> (ex: use .killinactive 3 to kill servers that haven't seen anyone for 3 days)");
 			return;
 		}
-		if (Functions.isNumeric(keywords[1])) {
+		if (Functions.isInteger(keywords[1])) {
 			ArrayList<String> ports = new ArrayList<>();
 			int numOfDays = Integer.parseInt(keywords[1]);
 			if (numOfDays > 0) {
@@ -1340,8 +1392,8 @@ public class Bot {
 					channel.sendMessage("No servers were killed.");
 				}
 				else {
-					sendLogAdminMessage(Functions.pluralize(bold(userInfo(sender)) + " Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") + ")", ports.size()));
-					channel.sendMessage(Functions.pluralize("Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") + ")", ports.size()));
+					sendLogAdminMessage(Functions.pluralize(bold(userInfo(sender)) + " Killed " + ports.size() + " server{s} (" + String.join(", ", ports) + ")", ports.size()));
+					channel.sendMessage(Functions.pluralize("Killed " + ports.size() + " server{s} (" + String.join(", ", ports) + ")", ports.size()));
 					//if (channel != cfg_data.irc_channel)
 					//	sendMessage(cfg_data.irc_channel, Functions.pluralize("Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") + ")", ports.size()));
 				}
@@ -1393,7 +1445,7 @@ public class Bot {
 	private void processOwner(String[] keywords, MessageChannel channel) {
 		logMessage(LOGLEVEL_DEBUG, "Processing an owner.");
 			if (keywords.length == 2) {
-				if (Functions.isNumeric(keywords[1])) {
+				if (Functions.isInteger(keywords[1])) {
 					Server s = getServer(Integer.parseInt(keywords[1]));
 					if (s != null)
 						channel.sendMessage("The owner of port " + keywords[1] + " is: " + s.sender + "[" + s.userId + "].");
@@ -1442,7 +1494,7 @@ public class Bot {
 		logMessage(LOGLEVEL_NORMAL, "Processing a request for rcon (from " + channel + ").");
 		if (isAccountTypeOf(userLevel, REGISTERED)) {
 			if (keywords.length == 2) {
-				if (Functions.isNumeric(keywords[1])) {
+				if (Functions.isInteger(keywords[1])) {
 					int port = Integer.parseInt(keywords[1]);
 					Server s = getServer(port);
 					if (s != null) {
@@ -1488,7 +1540,7 @@ public class Bot {
 			if (!servers.isEmpty()) {
 				for (Server server : servers) {
 					channel.sendMessage( server.port + ": \"" + server.servername + ((server.wads != null) ?
-					"\" with wads " + Functions.implode(server.wads, ", ") : ""));
+					"\" with wads " + String.join(", ", server.wads) : ""));
 				}
 			}
 			else
@@ -1605,4 +1657,5 @@ public class Bot {
 	public void sendMessage(MessageChannel channel, String msg) {
 		channel.sendMessage(msg);
 	}
+
 }

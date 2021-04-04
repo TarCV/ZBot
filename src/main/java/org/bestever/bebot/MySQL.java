@@ -441,9 +441,9 @@ public class MySQL {
 	 * @param level Int - their user level
 	 * @param channel String - the channel
 	 */
-	public static void loadSlot(String hostname, String[] words, AccountType level, MessageChannel channel) {
+	public static void loadSlot(String hostname, String[] words, AccountType level, MessageChannel channel) throws InputException {
 		if (words.length == 2) {
-			if (Functions.isNumeric(words[1])) {
+			if (Functions.isInteger(words[1])) {
 				int slot = Integer.parseInt(words[1]);
 				if (slot > 10 || slot < 1) {
 					bot.sendMessage(channel, "Slot must be between 1 and 10.");
@@ -502,7 +502,7 @@ public class MySQL {
 	 */
 	public static void showSlot(String hostname, String[] words, MessageChannel channel) {
 		if (words.length == 2) {
-			if (Functions.isNumeric(words[1])) {
+			if (Functions.isInteger(words[1])) {
 				int slot = Integer.parseInt(words[1]);
 				if (slot > 0 && slot < 11) {
 					String query = "SELECT `serverstring`,`slot` FROM `" + mysql_db + "`.`save` WHERE `slot` = ? && `username` = ?";

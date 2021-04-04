@@ -13,6 +13,9 @@ dependencies {
     implementation("org.ini4j:ini4j:0.5.2")
     implementation("javax.json:javax.json-api:1.1.4")
     implementation("org.glassfish:javax.json:1.1.4")
+    implementation("com.google.guava:guava:30.1-jre")
+
+    testImplementation("junit:junit:4.12")
 }
 
 application {

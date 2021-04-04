@@ -21,10 +21,11 @@ import com.mewna.catnip.entity.channel.MessageChannel;
 import java.io.File;
 import java.io.PrintWriter;
 import java.security.NoSuchAlgorithmException;
+import java.text.MessageFormat;
 import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 import static org.bestever.bebot.Logger.LOGLEVEL_CRITICAL;
 import static org.bestever.bebot.Logger.logMessage;
@@ -69,7 +70,7 @@ public class Server {
 	/**
 	 * Contains the reference to the bot
 	 */
-	public Bot bot;
+	public MessageReceiver bot;
 
 	/**
 	 * Contains the ip:port it is run on
@@ -122,7 +123,7 @@ public class Server {
 	/**
 	 * Contains the entire ".host" command
 	 */
-	public String host_command;
+	public Map<String, String> host_command;
 
 	/**
 	 * Contains the level of the user
@@ -162,7 +163,7 @@ public class Server {
 	/**
 	 * Contains a list of all the wads used by the server separated by a space
 	 */
-	public ArrayList<String> wads;
+	public List<String> wads;
 
 	/**
 	 * Contains a list of all the optional wads used by the server separated by a space
@@ -249,6 +250,8 @@ public class Server {
 	 * This is the time of a day in milliseconds
 	 */
 	public static final long DAY_MILLISECONDS = 1000 * 60 * 60 * 24;
+	public ServerManager manager;
+
 	/**
 	 * Default constructor for building a server
 	 */
@@ -262,29 +265,28 @@ public class Server {
 	 * In addition, all servers will be passed onto a server queue that will use a
 	 * thread which processes them one by one from the queue to prevent two servers
 	 * attempting to use the same port at the same time
-	 * @param botReference The reference to the running bot
-	 * @param servers The LinkedList of servers for us to add on a server if successful
-	 * @param channel The channel it was sent from
 	 * @param hostname The hostname of the sender
+	 * @param bot
+	 * @param botReference The reference to the running bot
+	 * @param cfg_data
+	 * @param versionParser
+	 * @param channel The channel it was sent from
 	 * @param message The message sent
 	 * @param userLevel
 	 */
-	public static Server handleHostCommand(Bot botReference, LinkedList<Server> servers, MessageChannel channel, String userId, String message, AccountType userLevel, boolean autoRestart, int port, String id, boolean recovering) {
-//		try { Thread.sleep(100); } catch (InterruptedException e) { e.printStackTrace(); }
-	
-		// Initialize server without linking it to the ArrayList
+	public static void handleHostCommand(MessageReceiver botReference, ServerManager serverManager, ConfigData cfg_data, VersionParser versionParser, MessageChannel channel, String userId, Map<String, String> message, AccountType userLevel, boolean autoRestart, int port, String id, boolean recovering) throws InputException {
 		Server server = new Server();
 
 		// Reference server to bot
 		server.bot = botReference;
+		server.manager = serverManager;
 
 		// Initialize the wad arraylist
-		server.wads = new ArrayList<String>();
-		server.optwads = new ArrayList<String>();
+		server.wads = new ArrayList<>();
+		server.optwads = new ArrayList<>();
 
 		// Check if autoRestart was enabled
-		if (autoRestart)
-			server.auto_restart = true;
+		server.auto_restart = autoRestart;
 
 		server.temp_port = port;
 
@@ -297,144 +299,107 @@ public class Server {
 		// The bot structure of using the executable has changed, we will set
 		// it to default here at the very beginning to the normal exe, but it
 		// can be changed later on in the code with a binary=... flag
-		server.version = botReference.versionParser.defaultVersion;
+		server.version = versionParser.defaultVersion;
 
-		// Regex that will match key=value, as well as quotes key="value"
-		Pattern regex = Pattern.compile("(\\w+)=\"*((?<=\")[^\"]+(?=\")|([^\\s]+))\"*");
-		Matcher m = regex.matcher(message);
-
-		// While we have a key=value
-		while (m.find()) {
-			switch (m.group(1).toLowerCase()) {
-				case "autorestart":
-					server.auto_restart = handleTrue(m.group(2));
-					break;
-				case "version":
-					String wanted = m.group(2).toLowerCase();
-					Version v = server.bot.versionParser.getVersion(wanted);
+		for (Map.Entry<String, String> entry : message.entrySet()) {
+			String key = entry.getKey();
+			String value = entry.getValue();
+			switch (key) {
+				case "autorestart" -> {
+					server.auto_restart = handleTrue(value);
+				}
+				case "version" -> {
+					String wanted = value.toLowerCase();
+					Version v = versionParser.getVersion(wanted);
 					if (v != null) {
 						server.version = v;
 					} else {
-						server.bot.sendMessage(channel, "Invalid version.");
-						return null;
+						server.bot.onError("Invalid version.");
+						return;
 					}
-
-					break;
-
-				case "buckshot":
-					server.buckshot = handleTrue(m.group(2));
-					break;
-				case "compatflags":
-					server.compatflags = handleGameFlags(m.group(2));
+				}
+				case "buckshot" -> {
+					server.buckshot = handleTrue(value);
+				}
+				case "compatflags" -> {
+					server.compatflags = handleGameFlags(value);
 					if (server.compatflags == FLAGS_ERROR) {
-						server.bot.sendMessage(channel, "Problem with parsing compatflags");
-						return null;
+						throw new InputException("Problem with parsing compatflags");
 					}
-					break;
-				case "zacompatflags":
-					server.zacompatflags = handleGameFlags(m.group(2));
+				}
+				case "zacompatflags" -> {
+					server.zacompatflags = handleGameFlags(value);
 					if (server.compatflags == FLAGS_ERROR) {
-						server.bot.sendMessage(channel, "Problem with parsing zacompatflags");
-						return null;
+						throw new InputException("Problem with parsing zacompatflags");
 					}
-					break;
-				case "config":
-					if (!server.checkConfig(server.bot.cfg_data.bot_cfg_directory_path + Functions.cleanInputFile(m.group(2).toLowerCase()))) {
-						server.bot.sendMessage(channel, "Config file '" + m.group(2) + "' does not exist.");
-						return null;
+				}
+				case "config" -> {
+					if (!server.checkConfig(cfg_data.bot_cfg_directory_path + Functions.cleanInputFile(value.toLowerCase()))) {
+						throw new InputException("Config file '" + value + "' does not exist.");
 					}
-					server.config = Functions.cleanInputFile(m.group(2).toLowerCase());
-					break;
-				case "data":
-				case "stdata":
-					server.enable_skulltag_data = handleTrue(m.group(2));
-					break;
-				case "dmflags":
-					server.dmflags = handleGameFlags(m.group(2));
+					server.config = Functions.cleanInputFile(value.toLowerCase());
+				}
+				case "data", "stdata" -> server.enable_skulltag_data = handleTrue(value);
+				case "dmflags" -> {
+					server.dmflags = handleGameFlags(value);
 					if (server.dmflags == FLAGS_ERROR) {
-						server.bot.sendMessage(channel, "Problem with parsing dmflags");
-						return null;
+						throw new InputException("Problem with parsing dmflags");
 					}
-					break;
-				case "dmflags2":
-					server.dmflags2 = handleGameFlags(m.group(2));
+				}
+				case "dmflags2" -> {
+					server.dmflags2 = handleGameFlags(value);
 					if (server.dmflags2 == FLAGS_ERROR) {
-						server.bot.sendMessage(channel, "Problem with parsing dmflags2");
-						return null;
+						throw new InputException("Problem with parsing dmflags2");
 					}
-					break;
-				case "zadmflags":
-					server.zadmflags = handleGameFlags(m.group(2));
+				}
+				case "zadmflags" -> {
+					server.zadmflags = handleGameFlags(value);
 					if (server.zadmflags == FLAGS_ERROR) {
-						server.bot.sendMessage(channel, "Problem with parsing zadmflags");
-						return null;
+						throw new InputException("Problem with parsing zadmflags");
 					}
-					break;
-				case "gamemode":
-					server.gamemode = getGamemode(m.group(2));
-					break;
-				case "hostname":
-					server.servername = m.group(2);
-					break;
-				case "instagib":
-					server.instagib = handleTrue(m.group(2));
-					break;
-				case "iwad":
-					server.iwad = getIwad(Functions.cleanInputFile(m.group(2)));
-					break;
-				case "map":
-					server.map = m.group(2);
-					break;
-				case "mapwad":
-					server.mapwads = addWads(m.group(2));
-					break;
-				case "port":
-					if (Functions.checkValidPort(m.group(2)))
-						server.temp_port = Integer.valueOf(m.group(2));
+				}
+				case "gamemode" -> server.gamemode = getGamemode(value);
+				case "hostname" -> server.servername = value;
+				case "instagib" -> server.instagib = handleTrue(value);
+				case "iwad" -> server.iwad = getIwad(Functions.cleanInputFile(value));
+				case "map" -> server.map = value;
+				case "mapwad" -> server.mapwads = addWads(value);
+				case "port" -> {
+					if (Functions.checkValidPort(value))
+						server.temp_port = Integer.parseInt(value);
 					else {
-						server.bot.sendMessage(channel, "You did not input a valid port.");
-						return null;
+						throw new InputException("You did not input a valid port.");
 					}
-					if (server.checkPortExists(botReference, server.temp_port)) {
-						server.bot.sendMessage(channel, "Port " + server.temp_port + " is already in use.");
-						return null;
+					if (server.checkPortExists(serverManager, server.temp_port)) {
+						throw new InputException("Port " + server.temp_port + " is already in use.");
 					}
-					break;
-				case "skill":
-					server.skill = handleSkill(m.group(2));
+				}
+				case "skill" -> {
+					server.skill = handleSkill(value);
 					if (server.skill == -1) {
-						server.bot.sendMessage(channel, "Skill must be between 0-4");
-						return null;
+						throw new InputException("Skill must be between 0-4");
 					}
-					break;
-				case "wad":
-				case "file":
-				case "wads":
-				case "files":
-					String[] wadArray = addWads(m.group(2));
+				}
+				case "wad", "file", "wads", "files" -> {
+					String[] wadArray = addWads(value);
 					if (wadArray.length > 0) {
-						for (String wad : wadArray)
-							server.wads.add(wad);
+						server.wads.addAll(Arrays.asList(wadArray));
 					}
 					if (!MySQL.checkHashes(server.wads.toArray(new String[wadArray.length])))
-						return null;
-					break;
-				case "optionalwad":
-				case "optwad":
-				case "opt":
-				case "optfile":
-				case "optionalwads":
-				case "optwads":
-				case "opts":
-				case "optfiles":
-					String[] wadArray2 = addWads(m.group(2));
+						return;
+				}
+				case "optionalwad", "optwad", "opt", "optfile", "optionalwads", "optwads", "opts", "optfiles" -> {
+					String[] wadArray2 = addWads(value);
 					if (wadArray2.length > 0) {
 						for (String wad : wadArray2)
-							if(!server.optwads.contains(wad)) server.optwads.add(wad);
+							if (!server.optwads.contains(wad)) server.optwads.add(wad);
 					}
 					if (!MySQL.checkHashes(server.optwads.toArray(new String[wadArray2.length])))
-						return null;
-					break;
+						return;
+				}
+				default -> {
+					throw new InputException(MessageFormat.format("Unknown option ''{0}''", key));
+				}
 			}
 		}
 
@@ -443,17 +408,15 @@ public class Server {
 			for (int i = 0; i < server.wads.size(); i++) {
 				if (server.wads.get(i).startsWith("iwad:")) {
 					String tempWad = server.wads.get(i).split(":")[1];
-					if (!Functions.fileExists(server.bot.cfg_data.bot_iwad_directory_path + tempWad)) {
-						server.bot.sendMessage(channel, "File (iwad) '" + tempWad + "' does not exist!");
-						return null;
+					if (!Functions.fileExists(cfg_data.bot_iwad_directory_path + tempWad)) {
+						throw new InputException("File (iwad) '" + tempWad + "' does not exist!");
 					}
 					// Replace iwad: since we don't need it
 					else
 						server.wads.set(i, tempWad);
 				}
-				else if (!Functions.fileExists(server.bot.cfg_data.bot_wad_directory_path + server.wads.get(i))) {
-					server.bot.sendMessage(channel, "File '" + server.wads.get(i) + "' does not exist!");
-					return null;
+				else if (!Functions.fileExists(cfg_data.bot_wad_directory_path + server.wads.get(i))) {
+					throw new InputException("File '" + server.wads.get(i) + "' does not exist!");
 				}
 			}
 		}
@@ -461,34 +424,26 @@ public class Server {
 		// Check if the optional WADs exist
 		if (server.optwads != null) {
 			for (int i = 0; i < server.optwads.size(); i++) {
-				if (!Functions.fileExists(server.bot.cfg_data.bot_wad_directory_path + server.optwads.get(i))) {
-					server.bot.sendMessage(channel, "File '" + server.optwads.get(i) + "' does not exist!");
-					return null;
+				if (!Functions.fileExists(cfg_data.bot_wad_directory_path + server.optwads.get(i))) {
+					throw new InputException("File '" + server.optwads.get(i) + "' does not exist!");
 				}
 			}
 		}
 
 		// Now that we've indexed the string, check to see if we have what we need to start a server
 		if (server.iwad == null) {
-			server.bot.sendMessage(channel, "You are missing an iwad, or have specified an incorrect iwad. You can add it by appending: iwad=your_iwad");
-			return null;
+			throw new InputException("You are missing an iwad, or have specified an incorrect iwad. You can add it by appending: iwad=your_iwad");
 		}
 		if (server.gamemode == null) {
-	//		server.bot.sendMessage(channel, "You are missing the gamemode, or have specified an incorrect gamemode. You can add it by appending: gamemode=your_gamemode");
-	//		return null;
 			server.gamemode = "cooperative";
 		}
 		if (server.servername == null) {
-			server.bot.sendMessage(channel, "You are missing the hostname, or your hostname syntax is wrong. You can add it by appending: hostname=\"Your Server Name\"");
-			return null;
-	//		if (server.wads.get(0) != null) { server.servername = server.iwad.replace(".wad","").replace(".pk3","").replace(".pk7","")+" "+server.gamemode+" with "+Functions.implode(server.wads, ", ").replace(".wad","").replace(".pk3","").replace(".pk7","")+" hosted by "+server.irc_hostname; }
-	//		else { server.servername = server.iwad.replace(".wad","").replace(".pk3","").replace(".pk7","")+" "+server.gamemode+" hosted by "+server.irc_hostname; }
+			throw new InputException("You are missing the hostname, or your hostname syntax is wrong. You can add it by appending: hostname=\"Your Server Name\"");
 		}
 
 		// Check if the global server limit has been reached
-		if (!recovering && Functions.getFirstAvailablePort(server.bot.getMinPort(), server.bot.getMaxPort()) == 0) {
-			server.bot.sendMessage(channel, "Global server limit has been reached.");
-			return null;
+		if (!recovering && Functions.getFirstAvailablePort(serverManager.getMinPort(), serverManager.getMaxPort()) == 0) {
+			throw new InputException("Global server limit has been reached.");
 		}
 
 		// Generate the unique ID
@@ -499,8 +454,7 @@ public class Server {
 				server.server_id = Functions.generateHash();
 			} catch (NoSuchAlgorithmException e) {
 				logMessage(LOGLEVEL_CRITICAL, "Error generating MD5 hash!");
-				server.bot.sendMessage(channel, "Error generating MD5 hash. Please contact an administrator.");
-				return null;
+				throw new InputException("Error generating MD5 hash. Please contact an administrator.");
 			}
 		}
 		{
@@ -511,16 +465,14 @@ public class Server {
 		
 		// Warn if using Strife Cooperative
 		if (server.iwad.equals("strife1.wad") && (server.gamemode.equals("cooperative") || server.gamemode.equals("survival") || server.gamemode == null)) {
-			server.bot.sendMessage(channel, "Note: Strife Cooperative is not fully supported by Zandronum");
+			server.bot.onMessage("Note: Strife Cooperative is not fully supported by Zandronum");
 		}
 					
 		// Assign and start a new thread
 		server.recovering = recovering;
-		server.serverprocess = new ServerProcess(server);
+		server.serverprocess = new ServerProcess(server, cfg_data);
 		server.serverprocess.start();
 		MySQL.logServer(server.servername, server.server_id, server.userId);
-		
-		return server;
 	}
 
 	/**
@@ -602,7 +554,7 @@ public class Server {
 	 * @param port int - the port
 	 * @return true if taken, false if not
 	 */
-	private boolean checkPortExists(Bot b, int port) {
+	private boolean checkPortExists(ServerManager b, int port) {
 		if (b.getServer(port) == null)
 			return false;
 		else
@@ -615,7 +567,7 @@ public class Server {
 	 * @return int - skill level
 	 */
 	private static int handleSkill(String skill) {
-		if (!Functions.isNumeric(skill) || Integer.parseInt(skill) > 4 || Integer.parseInt(skill) < 0) {
+		if (!Functions.isInteger(skill) || Integer.parseInt(skill) > 4 || Integer.parseInt(skill) < 0) {
 			return -1;
 		}
 		else
@@ -822,15 +774,10 @@ public class Server {
 	 * @return True if to use it, false if not
 	 */
 	private static boolean handleTrue(String string) {
-		switch (string.toLowerCase()) {
-			case "on":
-			case "true":
-			case "yes":
-			case "enable":
-				return true;
-		}
-		// Otherwise if something is wrong, just assume we need it
-		return false;
+		return switch (string.toLowerCase()) {
+			case "on", "true", "yes", "enable" -> true;
+			default -> false;
+		};
 	}
 
 	/**
@@ -841,7 +788,7 @@ public class Server {
 	private static int handleGameFlags(String keyword) {
 		// If the right side is numeric and passes some logic checks, return that as the flag
 		int flag = 0;
-		if (Functions.isNumeric(keyword))
+		if (Functions.isInteger(keyword))
 			flag = Integer.parseInt(keyword);
 		if (flag >= 0)
 			return flag;
@@ -903,7 +850,7 @@ public class Server {
 				return "skill: " + this.skill;
 			case "wad":
 			case "wads":
-				return "wads: " + Functions.implode(this.wads, ", ");
+				return "wads: " + String.join(", ", this.wads);
 			default:
 				break;
 		}
@@ -927,5 +874,9 @@ public class Server {
 	public void killServer() {
 		if (this.serverprocess != null && this.serverprocess.isInitialized())
 			this.serverprocess.terminateServer();
+	}
+
+	public void executeCommand(String command) {
+		in.println(command);
 	}
 }

@@ -16,15 +16,15 @@
 
 package org.bestever.bebot;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -38,6 +38,10 @@ import static org.bestever.bebot.Bot.bold;
  * bot when the server is closed, or when to be terminated; nothing more
  */
 public class ServerProcess extends Thread {
+	private static final Logger logger = LoggerFactory.getLogger(ServerProcess.class);
+	public static final String ALTERNATE_PORT_LOG_PREFIX = "using alternate port ";
+	public static final String IP_ADDRESS_LOG_PREFIX = "Bound to IP: ";
+	public static final String SERVER_INITIALIZED_LOG_MESSAGE = "========== Odamex Server Initialized ==========";
 
 	/**
 	 * This contains the strings that will run in the process builder
@@ -68,14 +72,16 @@ public class ServerProcess extends Thread {
 	/**
 	 * Config data
 	 */
-	public ConfigData cfg_data;
+	private final ConfigData cfg_data;
 
 	/**
 	 * This should be called before starting run
 	 * @param serverReference A reference to the server it is connected to (establishing a back/forth relationship to access its data)
+	 * @param configData
 	 */
-	public ServerProcess(Server serverReference) {
+	public ServerProcess(Server serverReference, ConfigData configData) {
 		this.server = serverReference;
+		this.cfg_data = configData;
 		processServerRunCommand();
 	}
 
@@ -92,18 +98,18 @@ public class ServerProcess extends Thread {
 	 * process. It will also handle removing it from the linked list.
 	 */
 	public void terminateServer() {
-		server.bot.removeServerFromLinkedList(this.server);
+		server.manager.removeServerFromLinkedList(this.server);
 		if (getPid() != -1)  {
 			try {
 				String command = "kill -9 " + getPid();
-				server.bot.sendDebugMessage("using " + command);
+				logger.debug("Removing server using {}", command);
 				Runtime.getRuntime().exec(command);
 			} catch (Exception ex) {
-				server.bot.sendDebugMessage("using proc.destroy()");
+				logger.debug("Removing server using proc.destroy()");
 				proc.destroy();
 			}
 		} else {
-			server.bot.sendDebugMessage("pid == -1; using proc.destroy()");
+			logger.debug("pid == -1; Removing server using proc.destroy()");
 			proc.destroy();
 		}
 	}
@@ -122,7 +128,9 @@ public class ServerProcess extends Thread {
 
 		// This must always be first (we may also want a custom binary, so do that here as well)
 		serverRunCommands.add(server.version.path);
-		
+
+		addParameter("-crashout", Functions.absolutePath(cfg_data.bot_logfiledir));
+
 		// Add fake parameters for who hosted the server
 		addParameter("-owner", server.userId);
 
@@ -131,13 +139,16 @@ public class ServerProcess extends Thread {
 		if (server.temp_port != 0)
 			addParameter("-port", String.valueOf(server.temp_port));
 		else
-			addParameter("-port", Integer.toString(server.bot.getMinPort()));
+			addParameter("-port", Integer.toString(server.manager.getMinPort()));
 
 		// Load the global configuration file
-		addParameter("+exec", server.bot.cfg_data.bot_cfg_directory_path + "global.cfg");
+		addParameter("+exec", Functions.absolutePath(cfg_data.bot_cfg_directory_path + "global.cfg"));
+
+		// TODO: remove this
+		addParameter("+sv_usemasters", "0");
 
 		if (server.iwad != null)
-			addParameter("-iwad", server.bot.cfg_data.bot_iwad_directory_path + server.iwad);
+			addParameter("-iwad", Functions.absolutePath(cfg_data.bot_iwad_directory_path + server.iwad));
 
 		if (server.enable_skulltag_data) {
 			// Add the skulltag_* data files first since they need to be accessed by other wads
@@ -147,23 +158,23 @@ public class ServerProcess extends Thread {
 		}
 
 		// Add the extra wads and clean duplicates
-		server.wads.addAll(server.bot.cfg_data.bot_extra_wads);
+		server.wads.addAll(cfg_data.bot_extra_wads);
 		server.wads = Functions.removeDuplicateWads(server.wads);
 
 		// Finally, add the wads
-		if (server.wads.size() > 0) {
+		if (!server.wads.isEmpty()) {
 			for (String wad : server.wads) {
 				if (Server.isIwad(wad))
-					addParameter("-file", server.bot.cfg_data.bot_iwad_directory_path + wad);
+					addParameter("-file", Functions.absolutePath(cfg_data.bot_iwad_directory_path + wad));
 				else if (wad != null && !wad.trim().isEmpty())
-					addParameter("-file", server.bot.cfg_data.bot_wad_directory_path + wad);
+					addParameter("-file", Functions.absolutePath(cfg_data.bot_wad_directory_path + wad));
 			}
 		}
 
 		// Optional WADs
-		if (server.optwads.size() > 0) {
+		if (!server.optwads.isEmpty()) {
 			for (String wad : server.optwads) {
-				addParameter("-optfile", server.bot.cfg_data.bot_wad_directory_path + wad);
+				addParameter("-optfile", Functions.absolutePath(cfg_data.bot_wad_directory_path + wad));
 			}
 		}
 		
@@ -201,26 +212,26 @@ public class ServerProcess extends Thread {
 			addParameter("+buckshot", "1");
 
 		if (server.config != null)
-			addParameter("+exec", server.bot.cfg_data.bot_cfg_directory_path + server.config);
+			addParameter("+exec", Functions.absolutePath(cfg_data.bot_cfg_directory_path + server.config));
 
 		if (server.servername != null)
-			addParameter("+sv_hostname", server.bot.cfg_data.bot_hostname_base + " " + server.servername);
+			addParameter("+sv_hostname", cfg_data.bot_hostname_base + " " + server.servername);
 			
 		// Add rcon/file based stuff
 		addParameter("+sv_rconpassword", server.rcon_password);
 		addParameter("+sv_password", server.server_password);
 		addParameter("+sv_joinpassword", server.server_password);
-		addParameter("+sv_banfile", server.bot.cfg_data.bot_banlistdir + server.userId + ".txt");
-		addParameter("+sv_adminlistfile", server.bot.cfg_data.bot_adminlistdir + server.userId + ".txt");
-		addParameter("+sv_banexemptionfile", server.bot.cfg_data.bot_whitelistdir + server.userId + ".txt");
+		addParameter("+sv_banfile", Functions.absolutePath(cfg_data.bot_banlistdir + server.userId + ".txt"));
+		addParameter("+sv_adminlistfile", Functions.absolutePath(cfg_data.bot_adminlistdir + server.userId + ".txt"));
+		addParameter("+sv_banexemptionfile", Functions.absolutePath(cfg_data.bot_whitelistdir + server.userId + ".txt"));
 
 		// Create a custom wadpage for us
 		server.wads.addAll(server.optwads);
 		server.wads = Functions.removeDuplicateWads(server.wads);
-		String key = MySQL.createWadPage(Functions.implode(server.wads, ","));
+		String key = MySQL.createWadPage(String.join(",", server.wads));
 
 		// Add the custom page to sv_website to avoid large wad list lookups
-		addParameter("+sv_website", server.bot.cfg_data.website_link + "/wadpage?key=" + key);
+		addParameter("+sv_website", cfg_data.website_link + "/wadpage?key=" + key);
 
 		addParameter("-host", "");
 
@@ -248,7 +259,7 @@ public class ServerProcess extends Thread {
 	 */
 	@Override
 	public void run() {
-		server.bot.sendDebugMessage("Attempting to start server.");
+		logger.debug("Attempting to start server.");
 //		try { Thread.sleep(10000); } catch (InterruptedException e) { e.printStackTrace(); }
 		String portNumber = ""; // This will hold the port number
 		String ipAddress = "";
@@ -261,23 +272,23 @@ public class ServerProcess extends Thread {
 		SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MMM-dd HH:mm:ss");
 		try {
 			// Ensure we have the files created
-			banlist = new File(server.bot.cfg_data.bot_banlistdir, server.userId + ".txt");
+			banlist = new File(cfg_data.bot_banlistdir, server.userId + ".txt");
 			if (!banlist.exists())
-				createDirectoryAndFile(banlist);
-			whitelist = new File(server.bot.cfg_data.bot_whitelistdir, server.userId + ".txt");
+				Functions.createDirectoryAndFile(banlist);
+			whitelist = new File(cfg_data.bot_whitelistdir, server.userId + ".txt");
 			if (!whitelist.exists())
-				createDirectoryAndFile(whitelist);
-			adminlist = new File(server.bot.cfg_data.bot_adminlistdir, server.userId + ".txt");
+				Functions.createDirectoryAndFile(whitelist);
+			adminlist = new File(cfg_data.bot_adminlistdir, server.userId + ".txt");
 			if (!adminlist.exists())
-				createDirectoryAndFile(adminlist);
+				Functions.createDirectoryAndFile(adminlist);
 
-			server.bot.sendDebugMessage("Building process");
+			logger.debug("Building process");
 			// Set up the server
 			ProcessBuilder pb = new ProcessBuilder(serverRunCommands.toArray(new String[0]));
 			// Redirect stderr to stdout
 			pb.redirectErrorStream(true);
 			// Set our working directory
-			pb.directory(new File(server.bot.cfg_data.doom_executable_path));
+			pb.directory(new File(server.version.path).getParentFile());
 			proc = pb.start();
 			br = new BufferedReader(new InputStreamReader(proc.getInputStream()));
 
@@ -285,18 +296,18 @@ public class ServerProcess extends Thread {
 			server.in = new PrintWriter(proc.getOutputStream(), true);
 
 			// Set up file/IO
-			logFile = new File(server.bot.cfg_data.bot_logfiledir, server.server_id + ".txt");
+			logFile = new File(cfg_data.bot_logfiledir, server.server_id + ".txt");
 			if (!logFile.exists()) {
-				createDirectoryAndFile(logFile);
+				Functions.createDirectoryAndFile(logFile);
 			}
-			bw = new BufferedWriter(new FileWriter(new File(server.bot.cfg_data.bot_logfiledir, server.server_id + ".txt"), true));
+			bw = new BufferedWriter(new FileWriter(new File(cfg_data.bot_logfiledir, server.server_id + ".txt"), true));
 			
 
 			bw.write("----------------------------------------------------------------\n");
 			bw.write(" Server started at " + formatter.format(Calendar.getInstance().getTime()) + "\n");
 			bw.write(" Owner: " + server.sender + "\n");
-			bw.write(" Service: " + server.bot.cfg_data.service_name + "\n");
-			bw.write(" Node: " + server.bot.cfg_data.node_name + "\n");
+			bw.write(" Service: " + cfg_data.service_name + "\n");
+			bw.write(" Node: " + cfg_data.node_name + "\n");
 			bw.write(" Hostline: " + serverRunCommands.toString().replaceAll("^\\[","").replaceAll("\\]$","").replace(", "," ") + "\n");
 			bw.write("----------------------------------------------------------------\n");
 			bw.flush();
@@ -307,67 +318,45 @@ public class ServerProcess extends Thread {
 			// NOTE: As of now, BE users can still check the RCON password by accessing the control panel on the website.
 			// We'll fix this later by changing the RCON from the unique_id to a random MD5 hash
 			if (!this.server.recovering) {
-				server.bot.sendLogUserMessage(bold(server.sender) + " starts server '" + server.servername + "' with PID " + bold(""+getPid()) + " and UUID " + bold(server.server_id) + " - Log File: " + server.bot.cfg_data.static_link + "/logs/" + server.server_id + ".txt");
+				server.bot.onMessage(bold(server.sender) + " starts server '" + server.servername + " and UUID " + bold(server.server_id) + " - Log File: " + cfg_data.static_link + "/logs/" + server.server_id + ".txt");
 			}
 			
 			// Process server while it outputs text
 			while ((strLine = br.readLine()) != null) {
-				String[] keywords = strLine.split(" ");
+				final int timePrefixEnd = strLine.indexOf("]") + 1;
+				strLine = strLine.substring(timePrefixEnd).trim();
+
 				// Make sure to get the port [Server using alternate port 10666.]
-				if (strLine.startsWith("Server using alternate port ")) {
-					portNumber = strLine.replace("Server using alternate port ", "").replace(".", "").trim();
-					if (Functions.isNumeric(portNumber)) {
+				if (strLine.startsWith(ALTERNATE_PORT_LOG_PREFIX)) {
+					portNumber = strLine.replace(ALTERNATE_PORT_LOG_PREFIX, "").replace(".", "").trim();
+					if (Functions.isInteger(portNumber)) {
 						server.port = Integer.parseInt(portNumber);
 					} else
-						server.bot.sendMessage(server.channel, "Warning: port parsing error when setting up server [1]; contact an administrator.");
+						server.bot.onError("Warning: port parsing error when setting up server; contact an administrator.");
 
 				// If the port is used [NETWORK_Construct: Couldn't bind to 10666. Binding to 10667 instead...]
 				} else if (strLine.startsWith("NETWORK_Construct: Couldn't bind to ")) {
 					portNumber = strLine.replace("NETWORK_Construct: Couldn't bind to " + portNumber + ". Binding to ", "").replace(" instead...", "").trim();
-					if (Functions.isNumeric(portNumber)) {
+					if (Functions.isInteger(portNumber)) {
 						server.port = Integer.parseInt(portNumber);
 					} else
-						server.bot.sendMessage(server.channel, "Warning: port parsing error when setting up server [2]; contact an administrator.");
+						server.bot.onError("Warning: port parsing error when setting up server [2]; contact an administrator.");
 				}
-				if (strLine.startsWith("IP address ")) {
-					server.address = strLine.replace("IP address ", "").trim();
+				if (strLine.startsWith(IP_ADDRESS_LOG_PREFIX)) {
+					server.address = strLine.replace(IP_ADDRESS_LOG_PREFIX, "").trim();
 				}
 				// If we see this, the server started
-				if (strLine.equalsIgnoreCase("UDP Initialized.")) {
-					server.bot.sendDebugMessage("Found \"UDP Initialized.\" in server output. Assuming the server started.");
-					try {
-						server.bot.servers.add(server);
-					} catch (Exception e) {
-						if (this.server.recovering)
-							System.out.println(server.sender+"'s server '" + server.servername + "' with UUID " + server.server_id + " was unable to be added to the linked list - Killing!");
-						else {
-							server.bot.sendMessage(server.channel, "Server '" + server.servername + "' was unable to be added to the server list and has been killed. Please contact an Administrator.");
-							server.bot.sendLogErrorMessage(bold(server.sender) + "'s server with UUID "+bold(server.server_id)+" was unable to be added to the server list - Killing!");
-						}
-						e.printStackTrace();
-						server.serverprocess.terminateServer();
-						server.hide_stop_message = true;
-						server.in.close();
-						return;
-					}
-					try {
-						server.bot.vSHashmap.get(server.version.name).add(server);
-					} catch (Exception e) {
-						if (this.server.recovering)
-							System.out.println(server.sender+"'s server '" + server.servername + "' with UUID " + server.server_id + " was unable to be added to the versions list");
-						else {
-							server.bot.sendLogErrorMessage(bold(server.sender) + "'s server with UUID "+bold(server.server_id)+" was unable to be added to the versions list");
-						}
-						e.printStackTrace();
-					}
+				if (strLine.equalsIgnoreCase(SERVER_INITIALIZED_LOG_MESSAGE)) {
+					server.manager.addToLinkedList(server);
+
 					if (!this.server.recovering) {
 //						if (!MySQL.serverInRecovery(server.server_id))
 //							MySQL.addServerToRecovery(server);
-						server.bot.sendLogServerMessage(bold(server.sender) + "'s server '" + server.servername + "' has been assigned port " + bold(""+server.port));
-						server.bot.sendMessage(server.channel, "Server '" + server.servername + "' started successfully on port " + server.port + "! zds://" + server.address + "/za");
-						server.bot.sendMessage(server.channel, "Server '" + server.servername + "' started successfully on port " + server.port + "! - To kill your server, in the channel " + server.bot.cfg_data.discord_channel + ", type .kill " + server.port);
-						server.bot.sendMessage(server.channel, "Your unique server ID is: " + server.server_id + ". You can view your logfile at " + server.bot.cfg_data.static_link + "/logs/" + server.server_id + ".txt");
-						server.bot.sendMessage(server.channel, "Your RCON password is "+server.rcon_password+". Your server's connect and join passwords are "+server.server_password+" if you have either of those enabled.");
+						logger.info("{}''s server ''{}'' has been assigned port {}", bold(server.sender), server.servername, bold("" + server.port));
+						server.bot.onMessage("Server '" + server.servername + "' started successfully on port " + server.port + "! zds://" + server.address + "/za");
+						server.bot.onMessage("Server '" + server.servername + "' started successfully on port " + server.port + "! - To kill your server, in the channel " + cfg_data.discord_channel + ", type .kill " + server.port);
+						server.bot.onMessage("Your unique server ID is: " + server.server_id + ". You can view your logfile at " + cfg_data.static_link + "/logs/" + server.server_id + ".txt");
+						server.bot.onMessage("Your RCON password is "+server.rcon_password+". Your server's connect and join passwords are "+server.server_password+" if you have either of those enabled.");
 					}
 					else {
 						System.out.println("Server '" + server.servername + "' with UUID " + server.server_id + " started successfully on port " + server.port + "!");
@@ -423,16 +412,16 @@ public class ServerProcess extends Thread {
 				// If we have an IP and a name, check if they are behind a proxy or are banned
 				if (name != null && ip != null) {
 					if (!MySQL.checkWhitelisted(ip)) {
-						if (server.bot.cfg_data.ipintel_enabled && !skipipintel)
+						if (cfg_data.ipintel_enabled && !skipipintel)
 						{
-							IPIntel.query(ip, name, server);
+							IPIntel.query(ip, name, cfg_data, server);
 						}
 						String decIP = MySQL.checkBanned(ip);
 						String reason = MySQL.getBannedReason(decIP);
 						if (decIP != null)
 						{
-							server.bot.sendLogErrorMessage(bold(name)+" with ip "+bold(ip)+" was kicked from " + bold(server.sender) + "'s server on port "+bold(server.port)+" as they're globally banned with reason: " + bold(reason));
-							server.in.flush(); server.in.println("addban " + ip + " perm " + "\"\\ciBanned from all " + server.bot.cfg_data.service_short + " servers: " + reason + "\";\n");
+							logger.error(bold(name)+" with ip "+bold(ip)+" was kicked from " + bold(server.sender) + "'s server on port "+bold(server.port)+" as they're globally banned with reason: " + bold(reason));
+							server.in.flush(); server.in.println("addban " + ip + " perm " + "\"\\ciBanned from all " + cfg_data.service_short + " servers: " + reason + "\";\n");
 						}
 					}
 				}
@@ -448,10 +437,10 @@ public class ServerProcess extends Thread {
 						if (!old.equals(server.servername)) {
 							if (!AccountType.isAccountTypeOf(server.user_level, AccountType.VIP)) {
 								server.in.flush();
-								server.in.println("sv_hostname \"" + server.bot.cfg_data.bot_hostname_base + " " + Functions.escapeQuotes(server.servername) + "\";\n");
+								server.in.println("sv_hostname \"" + cfg_data.bot_hostname_base + " " + Functions.escapeQuotes(server.servername) + "\";\n");
 							}
-							server.bot.sendMessage(server.channel, "Hostname for '%s' on port %d has been changed to: '%s'".formatted(old, server.port, server.servername));
-							server.bot.sendLogServerMessage("Hostname for " + bold(server.sender) + "'s server on port "+bold(server.port)+" has been changed to: "+bold(server.servername));
+							server.bot.onMessage("Hostname for '%s' on port %d has been changed to: '%s'".formatted(old, server.port, server.servername));
+							logger.info("Hostname for {}''s server on port {} has been changed to: {}", bold(server.sender), bold(server.port), bold(server.servername));
 						}
 					}
 				}
@@ -464,10 +453,10 @@ public class ServerProcess extends Thread {
 					server.rcon_password = matcher6.group(1);
 					if (!Pattern.compile("(?:\\n|^)\\s*$").matcher(server.rcon_password).find()) {
 						if (server.rcon_password.length() < 5) {
-							server.bot.sendMessage(server.channel, "RCON Password change for '%s' on port %d failed: Must be 5 or more characters!".formatted(server.servername, server.port));
+							server.bot.onError("RCON Password change for '%s' on port %d failed: Must be 5 or more characters!".formatted(server.servername, server.port));
 						}
 						else if (!old.equals(server.rcon_password)) {
-							server.bot.sendMessage(server.channel, "RCON Password for '%s' on port %d has been changed to: '%s'".formatted(server.servername, server.port, server.rcon_password));
+							server.bot.onMessage("RCON Password for '%s' on port %d has been changed to: '%s'".formatted(server.servername, server.port, server.rcon_password));
 						}
 					}
 				}
@@ -480,10 +469,10 @@ public class ServerProcess extends Thread {
 					server.join_password = matcher7.group(1);
 					if (!Pattern.compile("(?:\\n|^)\\s*$").matcher(server.join_password).find()) {
 						if (server.join_password.length() < 5) {
-							server.bot.sendMessage(server.channel, "Join Password change for '" + server.servername + "' on port " + server.port + " failed: Must be 5 or more characters!");
+							server.bot.onError("Join Password change for '" + server.servername + "' on port " + server.port + " failed: Must be 5 or more characters!");
 						}
 						else if (!old.equals(server.join_password)) {
-							server.bot.sendMessage(server.channel, "Join Password for '" + server.servername + "' on port " + server.port + " has been changed to: '" + server.join_password + "'");
+							server.bot.onMessage("Join Password for '" + server.servername + "' on port " + server.port + " has been changed to: '" + server.join_password + "'");
 						}
 					}
 				}
@@ -496,10 +485,10 @@ public class ServerProcess extends Thread {
 					server.connect_password = matcher8.group(1);
 					if (!Pattern.compile("(?:\\n|^)\\s*$").matcher(server.connect_password).find()) {
 						if (server.connect_password.length() < 5) {
-							server.bot.sendMessage(server.channel, "Connect Password change for '" + server.servername + "' on port " + server.port + " failed: Must be 5 or more characters!");
+							server.bot.onError("Connect Password change for '" + server.servername + "' on port " + server.port + " failed: Must be 5 or more characters!");
 						}
 						else if (!old.equals(server.connect_password)) {
-							server.bot.sendMessage(server.channel, "Connect Password for '" + server.servername + "' on port " + server.port + " has been changed to: '" + server.connect_password + "'");
+							server.bot.onMessage("Connect Password for '" + server.servername + "' on port " + server.port + " has been changed to: '" + server.connect_password + "'");
 						}
 					}
 				}
@@ -512,7 +501,7 @@ public class ServerProcess extends Thread {
 				bw.write(dateNow + " " + strLine + "\n");
 				bw.flush();
 			}
-			server.bot.sendDebugMessage("Server possibly stopped.");
+			logger.debug("Server possibly stopped.");
 			// Handle cleanup
 			dateNow = formatter.format(Calendar.getInstance().getTime());
 			long end = System.currentTimeMillis();
@@ -527,62 +516,49 @@ public class ServerProcess extends Thread {
 						if (MySQL.serverInRecovery(server.server_id))
 							MySQL.removeServerFromRecovery(server.server_id);
 						if (server.being_killed_by_owner) {
-							server.bot.sendMessage(server.channel, "Server '" + server.servername + "' on port " + server.port + " stopped! Server ran for " + Functions.calculateTime(uptime));
+							server.bot.onMessage("Server '" + server.servername + "' on port " + server.port + " stopped! Server ran for " + Functions.calculateTime(uptime));
 						}
 						else {
-							server.bot.sendMessage(server.channel, server.sender + "'s server '" + server.servername + "' on port " + server.port + " stopped! Server ran for " + Functions.calculateTime(uptime));
-							server.bot.sendMessage(server.channel, "Server '" + server.servername + "' on port " + server.port + " stopped! Server ran for " + Functions.calculateTime(uptime));
+							server.bot.onError(server.sender + "'s server '" + server.servername + "' on port " + server.port + " stopped! Server ran for " + Functions.calculateTime(uptime));
+							server.bot.onError("Server '" + server.servername + "' on port " + server.port + " stopped! Server ran for " + Functions.calculateTime(uptime));
 						}
 						// Don't log as we already log kill commands
 					} else {
-						server.bot.sendMessage(server.channel, server.sender + "'s server '" + server.servername + "' on port " + server.port + " crashed! Server ran for " + Functions.calculateTime(uptime));
-						server.bot.sendMessage(server.channel, "Server '" + server.servername + "' on port " + server.port + " crashed! Server ran for " + Functions.calculateTime(uptime));
-						server.bot.sendLogErrorMessage(bold(server.sender)+"'s server on port " + bold(server.port) + " " + bold("CRASHED") + "!!! - A log is available at " + bold(server.bot.cfg_data.static_link + "/logs/" + server.server_id + ".txt"));
+						server.bot.onError(server.sender + "'s server '" + server.servername + "' on port " + server.port + " crashed! Server ran for " + Functions.calculateTime(uptime));
+						server.bot.onError("Server '" + server.servername + "' on port " + server.port + " crashed! Server ran for " + Functions.calculateTime(uptime));
+						logger.error(bold(server.sender)+"'s server on port " + bold(server.port) + " " + bold("CRASHED") + "!!! - A log is available at " + bold(cfg_data.static_link + "/logs/" + server.server_id + ".txt"));
 					}
 				}
 				else if (!this.server.recovering) {
-					server.bot.sendMessage(server.channel, "Server '" + server.servername + "' was unable to start.");
-					server.bot.sendMessage(server.channel, "Server '" + server.servername + "' was unable to start. This is most likely due to a wad error, incorrect load order, missing required wads or requires a later game version. See your log file for more details.");
-					server.bot.sendMessage(server.channel, "You can view your logfile at " + server.bot.cfg_data.static_link + "/logs/" + server.server_id + ".txt");
-					server.bot.sendLogServerMessage(bold(server.sender)+"'s server '" + server.servername + "' was unable to start. See the log file for more details.");
+					server.bot.onError("Server '" + server.servername + "' was unable to start.");
+					server.bot.onError("Server '" + server.servername + "' was unable to start. This is most likely due to a wad error, incorrect load order, missing required wads or requires a later game version. See your log file for more details.");
+					server.bot.onError("You can view your logfile at " + cfg_data.static_link + "/logs/" + server.server_id + ".txt");
+					logger.info(bold(server.sender)+"'s server '" + server.servername + "' was unable to start. See the log file for more details.");
 				}
 			}
 
 			// Remove from the Linked List
-			server.bot.removeServerFromLinkedList(this.server);
+			server.manager.removeServerFromLinkedList(this.server);
 		} catch (Exception e) {
 			StackTraceElement[] trace = e.getStackTrace();
-			server.bot.sendMessage(server.channel, "ERROR");
-			server.bot.sendDebugMessage("EXCEPTION - " + e.getMessage());
-			for (StackTraceElement element : trace)
-				server.bot.sendDebugMessage("TRACE - " + element.toString());
+			server.bot.onError("ERROR");
+			logger.error("ERROR", e);
 			e.printStackTrace();
-			server.bot.removeServerFromLinkedList(this.server);
+			server.manager.removeServerFromLinkedList(this.server);
 		} finally {
 			try {
 				if (bw != null)
 					bw.close();
 			} catch (Exception e) {
-				StackTraceElement[] trace = e.getStackTrace();
-				for (StackTraceElement element : trace)
-					server.bot.sendDebugMessage("TRACE - " + element.toString());
 				e.printStackTrace();
 			}
 			try {
 				if (br != null)
 					br.close();
 			} catch (Exception e) {
-				StackTraceElement[] trace = e.getStackTrace();
-				for (StackTraceElement element : trace)
-					server.bot.sendDebugMessage("TRACE - " + element.toString());
 				e.printStackTrace();
 			}
 		}
 	}
 
-	private static void createDirectoryAndFile(File file) throws IOException {
-		final Path path = file.toPath();
-		Files.createDirectories(path.getParent());
-		Files.createFile(path);
-	}
 }

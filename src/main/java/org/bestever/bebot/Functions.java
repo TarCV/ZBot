@@ -16,17 +16,20 @@
 
 package org.bestever.bebot;
 
+import com.google.common.net.InetAddresses;
+
 import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.net.DatagramSocket;
-import java.net.InetAddress;
 import java.net.ServerSocket;
-import java.net.UnknownHostException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -39,8 +42,8 @@ public class Functions {
 	 * @return true if the port is valid
 	 */
 	public static boolean checkValidPort(String port) {
-		if (isNumeric(port)) {
-			int numPort = Integer.valueOf(port);
+		if (isInteger(port)) {
+			int numPort = Integer.parseInt(port);
 			return numPort >= Bot.min_port && numPort < Bot.max_port;
 		}
 		else
@@ -71,11 +74,9 @@ public class Functions {
 	 * @param l ArrayList - the list
 	 * @return cleaned ArrayList
 	 */
-	public static ArrayList<String> removeDuplicateWads(ArrayList<String> l) {
-		Set<String> setItems = new LinkedHashSet<>(l);
-		l.clear();
-		l.addAll(setItems);
-		return l;
+	public static List<String> removeDuplicateWads(List<String> l) {
+		Set<String> setItems = new HashSet<>(l);
+		return new ArrayList<>(setItems);
 	}
 
 	/**
@@ -94,12 +95,12 @@ public class Functions {
 	 * @param ip String - IP address of the user
 	 * @param ipRange String - IP range (asterisks)
 	 * @return true/false
-	 * @throws UnknownHostException
 	 */
-	public static boolean inRange(String ip, String ipRange) throws UnknownHostException {
-		long startIP = new BigInteger(InetAddress.getByName(ipRange.replace("*","0")).getAddress()).intValue();
-		long endIP = new BigInteger(InetAddress.getByName(ipRange.replace("*","255")).getAddress()).intValue();
-		long sourceIP = new BigInteger(InetAddress.getByName(ip).getAddress()).intValue();
+	@SuppressWarnings("UnstableApiUsage")
+	public static boolean inRange(String ip, String ipRange) {
+		long startIP = new BigInteger(InetAddresses.forString(ipRange.replace("*","0")).getAddress()).intValue();
+		long endIP = new BigInteger(InetAddresses.forString(ipRange.replace("*","255")).getAddress()).intValue();
+		long sourceIP = new BigInteger(InetAddresses.forString(ip).getAddress()).intValue();
 		return sourceIP >= startIP && sourceIP <= endIP;
 	}
 
@@ -136,12 +137,10 @@ public class Functions {
 	 * @param maybeid The String to check (does parse double)
 	 * @return True if it is a number, false if it's not
 	 */
-	public static boolean isNumeric(String maybeid) {
+	public static boolean isInteger(String maybeid) {
 		try {
-			Double.parseDouble(maybeid);
-		} catch (NumberFormatException nfe)	{
-			return false;
-		} catch (NullPointerException npe) {
+			Integer.parseInt(maybeid);
+		} catch (NumberFormatException | NullPointerException nfe)	{
 			return false;
 		}
 		return true;
@@ -215,43 +214,13 @@ public class Functions {
 		return input.replace("/", "").trim();
 	}
 
-	/**
-	 * Implodes a character between a string array
-	 * @param inputArray String[] - array to combine
-	 * @param glueString String - delimiter
-	 * @return String containing all array elements seperated by glue string
-	 */
-	public static String implode(String[] inputArray, String glueString) {
-		String output = "";
-		if (inputArray.length > 0) {
-			StringBuilder sb = new StringBuilder();
-			sb.append(inputArray[0]);
-			for (int i = 1; i < inputArray.length; i++) {
-				sb.append(glueString);
-				sb.append(inputArray[i].trim());
-			}
-			output = sb.toString();
-		}
-		return output;
-	}
+	static String absolutePath(String path) {
+        return new File(path).getAbsolutePath();
+    }
 
-	/**
-	 * Implodes a character between a string array
-	 * @param inputArray String[] - array to combine
-	 * @param glueString String - delimiter
-	 * @return String containing all array elements seperated by glue string
-	 */
-	public static String implode(ArrayList<String> inputArray, String glueString) {
-		String output = "";
-		if (inputArray.size() > 0) {
-			StringBuilder sb = new StringBuilder();
-			sb.append(inputArray.get(0));
-			for (int i = 1; i < inputArray.size(); i++) {
-				sb.append(glueString);
-				sb.append(inputArray.get(i).trim());
-			}
-			output = sb.toString();
-		}
-		return output;
-	}
+    static void createDirectoryAndFile(File file) throws IOException {
+        final Path path = file.toPath();
+        Files.createDirectories(path.getParent());
+        Files.createFile(path);
+    }
 }

@@ -105,11 +105,6 @@ public class ConfigData {
 	public String bot_iwad_directory_path;
 
 	/**
-	 * Contains a path to the doom executable
-	 */
-	public String doom_executable_path;
-
-	/**
 	 * Contains a path to the cfg directory
 	 */
 	public String bot_cfg_directory_path;
@@ -298,7 +293,6 @@ public class ConfigData {
 		this.bot_hostname_base = bot.get("hostname_base");
 		this.bot_help = bot.get("help");
 		this.cleanup_interval = Integer.parseInt(bot.get("cleanup_interval"));
-		this.doom_executable_path = bot.get("doom_executable_path");
 		if(bot.get("maxrestarts") != null) {
 			this.max_restarts = Integer.parseInt(bot.get("maxrestarts"));
 		}
