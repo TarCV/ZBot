@@ -30,8 +30,10 @@ import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.bestever.bebot.Bot.bold;
 
@@ -131,8 +133,6 @@ public class ServerProcess extends Thread {
 		// This must always be first (we may also want a custom binary, so do that here as well)
 		serverRunCommands.add(server.version.path);
 
-		addParameter("-crashout", Functions.absolutePath(cfg_data.bot_logfiledir));
-
 		// Add fake parameters for who hosted the server
 		addParameter("-owner", server.userId);
 
@@ -144,102 +144,75 @@ public class ServerProcess extends Thread {
 			addParameter("-port", Integer.toString(server.manager.getMinPort()));
 
 		// Load the global configuration file
-		addParameter("+exec", Functions.absolutePath(cfg_data.bot_cfg_directory_path + "global.cfg"));
+		addParameter("+exec", new File(cfg_data.bot_cfg_directory_path, "global.cfg").getAbsolutePath());
 
 		// TODO: remove this
 		addParameter("+sv_usemasters", "0");
 
 		if (server.iwad != null)
-			addParameter("-iwad", Functions.absolutePath(cfg_data.bot_iwad_directory_path + server.iwad));
-
-		if (server.enable_skulltag_data) {
-			// Add the skulltag_* data files first since they need to be accessed by other wads
-			int z = 0;
-			for (String stwad : server.version.data.split(" "))
-				server.wads.add(z++, stwad);
-		}
+			addParameter("-iwad", new File(cfg_data.bot_iwad_directory_path, server.iwad).getAbsolutePath());
 
 		// Add the extra wads and clean duplicates
 		server.wads.addAll(cfg_data.bot_extra_wads);
-		server.wads = Functions.removeDuplicateWads(server.wads);
+		Functions.removeDuplicateWads(server.wads);
 
 		// Finally, add the wads
-		if (!server.wads.isEmpty()) {
-			for (String wad : server.wads) {
-				if (Server.isIwad(wad))
-					addParameter("-file", Functions.absolutePath(cfg_data.bot_iwad_directory_path + wad));
-				else if (wad != null && !wad.trim().isEmpty())
-					addParameter("-file", Functions.absolutePath(cfg_data.bot_wad_directory_path + wad));
-			}
+		{
+			final List<String> files = server.wads.stream()
+					.filter(wad -> wad != null && !wad.isBlank())
+					.distinct()
+					.map(wad1 -> Functions.getWadAbsolutePath(wad1, cfg_data))
+					.collect(Collectors.toList());
+			addSpaceSeparatedParameter("-file", files);
 		}
 
-		// Optional WADs
-		if (!server.optwads.isEmpty()) {
-			for (String wad : server.optwads) {
-				addParameter("-optfile", Functions.absolutePath(cfg_data.bot_wad_directory_path + wad));
-			}
-		}
-		
-		if (server.map != null)
-			addParameter("+map", server.map);
-
-		addParameter("+skill", String.valueOf((server.skill != -1) ? server.skill : 3));
-
-		if (server.gamemode != null) {
-			if (!server.gamemode.equals("cooperative") || !server.gamemode.equals("survival")) {
-				addParameter("+cooperative", " 0");
-			}
-			addParameter("+" + server.gamemode, " 1");
+		if (!server.maps.isEmpty()) {
+			addSpaceSeparatedParameter("+map", server.maps);
 		}
 
-		if (server.dmflags > 0)
-			addParameter("+dmflags", Integer.toString(server.dmflags));
+		// This should be executed before changing any gameplay settings
+		server.gameMode.commands.forEach(this::addParameter);
 
-		if (server.dmflags2 > 0)
-			addParameter("+dmflags2", Integer.toString(server.dmflags2));
+		if (server.skill != Server.OdamexSkill.DEFAULT) {
+			addParameter("+sv_skill", String.valueOf(server.skill.number));
+		}
 
-		if (server.zadmflags > 0)
-			addParameter("+zadmflags", Integer.toString(server.zadmflags));
-
-		if (server.compatflags > 0)
-			addParameter("+compatflags", Integer.toString(server.compatflags));
-
-		if (server.zacompatflags > 0)
-			addParameter("+zacompatflags", Integer.toString(server.zacompatflags));
-
-		if (server.instagib)
-			addParameter("+instagib", "1");
-
-		if (server.buckshot)
-			addParameter("+buckshot", "1");
+		for (Server.OdamexFlags flag : server.removeFlags) {
+			addParameter(flag.odamexName, "0");
+		}
+		for (Server.OdamexFlags flag : server.addFlags) {
+			addParameter(flag.odamexName, "1");
+		}
 
 		if (server.config != null)
-			addParameter("+exec", Functions.absolutePath(cfg_data.bot_cfg_directory_path + server.config));
+			addParameter("+exec", new File(cfg_data.bot_cfg_directory_path + server.config).getAbsolutePath());
 
 		if (server.servername != null)
 			addParameter("+sv_hostname", cfg_data.bot_hostname_base + " " + server.servername);
 			
 		// Add rcon/file based stuff
-		addParameter("+sv_rconpassword", server.rcon_password);
-		addParameter("+sv_password", server.server_password);
-		addParameter("+sv_joinpassword", server.server_password);
-		addParameter("+sv_banfile", Functions.absolutePath(cfg_data.bot_banlistdir + server.userId + ".txt"));
-		addParameter("+sv_adminlistfile", Functions.absolutePath(cfg_data.bot_adminlistdir + server.userId + ".txt"));
-		addParameter("+sv_banexemptionfile", Functions.absolutePath(cfg_data.bot_whitelistdir + server.userId + ".txt"));
+		addParameter("+rcon_password", server.rcon_password);
+		addParameter("+join_password", server.server_password);
+		addParameter("+sv_banfile", new File(cfg_data.bot_banlistdir + server.userId + ".txt").getAbsolutePath());
+		addParameter("+exceptionlist", new File(cfg_data.bot_whitelistdir + server.userId + ".txt").getAbsolutePath());
 
 		// Create a custom wadpage for us
-		server.wads.addAll(server.optwads);
-		server.wads = Functions.removeDuplicateWads(server.wads);
+		Functions.removeDuplicateWads(server.wads);
 		String key = MySQL.createWadPage(String.join(",", server.wads));
 
 		// Add the custom page to sv_website to avoid large wad list lookups
-		addParameter("+sv_website", cfg_data.website_link + "/wadpage?key=" + key);
-
-		addParameter("-host", "");
+		addParameter("+sv_downloadsites", cfg_data.website_link + "/wadpage?key=" + key);
 
 		// Add the passwords to join and connect separately
 		server.join_password = server.server_password;
 		server.connect_password = server.server_password;
+	}
+
+	private void addSpaceSeparatedParameter(String name, List<String> list) {
+		if (!list.isEmpty()) {
+			addParameter(name);
+			list.forEach(this::addParameter);
+		}
 	}
 
 	/**
@@ -248,8 +221,16 @@ public class ServerProcess extends Thread {
 	 * @param argument String - argument
 	 */
 	public void addParameter(String parameter, String argument) {
+		addParameter(parameter);
+		addParameter(argument);
+	}
+
+	/**
+	 * Adds a single parameter to the server run command arraylist
+	 * @param parameter String - parameter
+	 */
+	public void addParameter(String parameter) {
 		serverRunCommands.add(parameter);
-		serverRunCommands.add(argument);
 	}
 
 	/**
@@ -280,9 +261,6 @@ public class ServerProcess extends Thread {
 			whitelist = new File(cfg_data.bot_whitelistdir, server.userId + ".txt");
 			if (!whitelist.exists())
 				Functions.createDirectoryAndFile(whitelist);
-			adminlist = new File(cfg_data.bot_adminlistdir, server.userId + ".txt");
-			if (!adminlist.exists())
-				Functions.createDirectoryAndFile(adminlist);
 
 			logger.debug("Building process");
 			// Set up the server
@@ -307,7 +285,7 @@ public class ServerProcess extends Thread {
 
 			bw.write("----------------------------------------------------------------\n");
 			bw.write(" Server started at " + formatter.format(Calendar.getInstance().getTime()) + "\n");
-			bw.write(" Owner: " + server.sender + "\n");
+			bw.write(" Owner: " + server.userName + "\n");
 			bw.write(" Service: " + cfg_data.service_name + "\n");
 			bw.write(" Node: " + cfg_data.node_name + "\n");
 			bw.write(" Hostline: " + serverRunCommands.toString().replaceAll("^\\[","").replaceAll("\\]$","").replace(", "," ") + "\n");
@@ -320,7 +298,7 @@ public class ServerProcess extends Thread {
 			// NOTE: As of now, BE users can still check the RCON password by accessing the control panel on the website.
 			// We'll fix this later by changing the RCON from the unique_id to a random MD5 hash
 			if (!this.server.recovering) {
-				server.bot.onMessage(bold(server.sender) + " starts server '" + server.servername + " and UUID " + bold(server.server_id) + " - Log File: " + cfg_data.static_link + "/logs/" + server.server_id + ".txt");
+				server.bot.onMessage(bold(server.userName) + " starts server '" + server.servername + "' - Log File: " + cfg_data.static_link + "/logs/" + server.server_id + ".txt");
 			}
 			
 			// Process server while it outputs text
@@ -345,7 +323,7 @@ public class ServerProcess extends Thread {
 						server.bot.onError("Warning: port parsing error when setting up server [2]; contact an administrator.");
 				}
 				if (strLine.startsWith(IP_ADDRESS_LOG_PREFIX)) {
-					server.address = strLine.replace(IP_ADDRESS_LOG_PREFIX, "").trim();
+					server. address = strLine.replace(IP_ADDRESS_LOG_PREFIX, "").trim();
 				}
 				// If we see this, the server started
 				if (strLine.equalsIgnoreCase(SERVER_INITIALIZED_LOG_MESSAGE)) {
@@ -354,9 +332,11 @@ public class ServerProcess extends Thread {
 					if (!this.server.recovering) {
 //						if (!MySQL.serverInRecovery(server.server_id))
 //							MySQL.addServerToRecovery(server);
-						logger.info("{}''s server ''{}'' has been assigned port {}", bold(server.sender), server.servername, bold("" + server.port));
-						server.bot.onMessage("Server '" + server.servername + "' started successfully on port " + server.port + "! zds://" + server.address + "/za");
-						server.bot.onMessage("Server '" + server.servername + "' started successfully on port " + server.port + "! - To kill your server, in the channel " + cfg_data.discord_channel + ", type .kill " + server.port);
+						logger.info("{}''s server ''{}'' has been assigned port {}", bold(server.userName), server.servername, bold("" + server.port));
+						server.bot.onMessage("Server '" + server.servername + "' started successfully on port " + server.port + "! zds://" + server.address + ":" + server.port + "/za");
+
+						// TODO: Send these privately
+						server.bot.onMessage("Server '" + server.servername + "' started successfully on port " + server.port + "! - To kill your server, in the channel #" + cfg_data.discord_channel + ", type .kill " + server.port);
 						server.bot.onMessage("Your unique server ID is: " + server.server_id + ". You can view your logfile at " + cfg_data.static_link + "/logs/" + server.server_id + ".txt");
 						server.bot.onMessage("Your RCON password is "+server.rcon_password+". Your server's connect and join passwords are "+server.server_password+" if you have either of those enabled.");
 					}
@@ -422,7 +402,7 @@ public class ServerProcess extends Thread {
 						String reason = MySQL.getBannedReason(decIP);
 						if (decIP != null)
 						{
-							logger.error(bold(name)+" with ip "+bold(ip)+" was kicked from " + bold(server.sender) + "'s server on port "+bold(server.port)+" as they're globally banned with reason: " + bold(reason));
+							logger.error(bold(name)+" with ip "+bold(ip)+" was kicked from " + bold(server.userName) + "'s server on port "+bold(server.port)+" as they're globally banned with reason: " + bold(reason));
 							server.in.flush(); server.in.println("addban " + ip + " perm " + "\"\\ciBanned from all " + cfg_data.service_short + " servers: " + reason + "\";\n");
 						}
 					}
@@ -442,7 +422,7 @@ public class ServerProcess extends Thread {
 								server.in.println("sv_hostname \"" + cfg_data.bot_hostname_base + " " + Functions.escapeQuotes(server.servername) + "\";\n");
 							}
 							server.bot.onMessage("Hostname for '%s' on port %d has been changed to: '%s'".formatted(old, server.port, server.servername));
-							logger.info("Hostname for {}''s server on port {} has been changed to: {}", bold(server.sender), bold(server.port), bold(server.servername));
+							logger.info("Hostname for {}''s server on port {} has been changed to: {}", bold(server.userName), bold(server.port), bold(server.servername));
 						}
 					}
 				}
@@ -521,28 +501,27 @@ public class ServerProcess extends Thread {
 							server.bot.onMessage("Server '" + server.servername + "' on port " + server.port + " stopped! Server ran for " + Functions.calculateTime(uptime));
 						}
 						else {
-							server.bot.onError(server.sender + "'s server '" + server.servername + "' on port " + server.port + " stopped! Server ran for " + Functions.calculateTime(uptime));
+							server.bot.onError(server.userName + "'s server '" + server.servername + "' on port " + server.port + " stopped! Server ran for " + Functions.calculateTime(uptime));
 							server.bot.onError("Server '" + server.servername + "' on port " + server.port + " stopped! Server ran for " + Functions.calculateTime(uptime));
 						}
 						// Don't log as we already log kill commands
 					} else {
-						server.bot.onError(server.sender + "'s server '" + server.servername + "' on port " + server.port + " crashed! Server ran for " + Functions.calculateTime(uptime));
+						server.bot.onError(server.userName + "'s server '" + server.servername + "' on port " + server.port + " crashed! Server ran for " + Functions.calculateTime(uptime));
 						server.bot.onError("Server '" + server.servername + "' on port " + server.port + " crashed! Server ran for " + Functions.calculateTime(uptime));
-						logger.error(bold(server.sender)+"'s server on port " + bold(server.port) + " " + bold("CRASHED") + "!!! - A log is available at " + bold(cfg_data.static_link + "/logs/" + server.server_id + ".txt"));
+						logger.error(bold(server.userName)+"'s server on port " + bold(server.port) + " " + bold("CRASHED") + "!!! - A log is available at " + bold(cfg_data.static_link + "/logs/" + server.server_id + ".txt"));
 					}
 				}
 				else if (!this.server.recovering) {
 					server.bot.onError("Server '" + server.servername + "' was unable to start.");
 					server.bot.onError("Server '" + server.servername + "' was unable to start. This is most likely due to a wad error, incorrect load order, missing required wads or requires a later game version. See your log file for more details.");
 					server.bot.onError("You can view your logfile at " + cfg_data.static_link + "/logs/" + server.server_id + ".txt");
-					logger.info(bold(server.sender)+"'s server '" + server.servername + "' was unable to start. See the log file for more details.");
+					logger.info(bold(server.userName)+"'s server '" + server.servername + "' was unable to start. See the log file for more details.");
 				}
 			}
 
 			// Remove from the Linked List
 			server.manager.removeServerFromLinkedList(this.server);
 		} catch (Exception e) {
-			StackTraceElement[] trace = e.getStackTrace();
 			server.bot.onError("ERROR");
 			logger.error("ERROR", e);
 			e.printStackTrace();

@@ -16,7 +16,9 @@
 package org.bestever.bebot;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.zip.ZipEntry;
@@ -60,7 +62,7 @@ public class DoomFile {
 	/**
 	 * An index of the level names
 	 */
-	public String[] levelNames;
+	public List<String> levelNames;
 	
 	/**
 	 * If theres a location finding error
@@ -171,13 +173,12 @@ public class DoomFile {
 			}
 		}
 		if (tempIndex == 0) {
-			this.levelNames = new String[0];
+			this.levelNames = Collections.emptyList();
 			return;
 		}
-		this.levelNames = new String[tempIndex];
-		for (int j = 0; j < tempIndex; j++)
-			this.levelNames[j] = temp[j];
-		Arrays.sort(this.levelNames);
+		final ArrayList<String> tempList = new ArrayList<>(Arrays.asList(temp).subList(0, tempIndex));
+		tempList.sort(String::compareTo);
+		this.levelNames = tempList;
 	}
 	
 	/**

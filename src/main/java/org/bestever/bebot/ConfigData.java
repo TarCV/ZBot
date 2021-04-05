@@ -122,11 +122,6 @@ public class ConfigData {
 	public String bot_banlistdir;
 
 	/**
-	 * Contains a path to the admin list directory
-	 */
-	public String bot_adminlistdir;
-
-	/**
 	 * Log file directory
 	 */
 	public String bot_logfiledir;
@@ -286,7 +281,6 @@ public class ConfigData {
 		this.bot_cfg_directory_path = bot.get("cfgdir");
 		this.bot_whitelistdir = bot.get("whitelistdir");
 		this.bot_banlistdir = bot.get("banlistdir");
-		this.bot_adminlistdir = bot.get("adminlistdir");
 		this.bot_logfiledir = bot.get("logfiledir");
 		this.bot_executable = bot.get("doom_executable_path") + bot.get("executable");
 		this.bot_executable_kpatch = bot.get("executable_kpatch");

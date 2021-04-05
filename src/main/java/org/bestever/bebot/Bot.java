@@ -398,9 +398,9 @@ public class Bot implements ServerManager {
 			vSHashmap.get(server.version.name).add(server);
 		} catch (Exception e) {
 			if (server.recovering)
-				System.out.println(server.sender+"'s server '" + server.servername + "' with UUID " + server.server_id + " was unable to be added to the versions list");
+				System.out.println(server.userName +"'s server '" + server.servername + "' with UUID " + server.server_id + " was unable to be added to the versions list");
 			else {
-				sendLogErrorMessage(bold(server.sender) + "'s server with UUID "+bold(server.server_id)+" was unable to be added to the versions list");
+				sendLogErrorMessage(bold(server.userName) + "'s server with UUID "+bold(server.server_id)+" was unable to be added to the versions list");
 			}
 			e.printStackTrace();
 		}
@@ -434,7 +434,7 @@ public class Bot implements ServerManager {
 		Server targetServer = getServer(port);
 		if (targetServer != null) {
 			targetServer.auto_restart = false;
-			String owner = targetServer.sender;
+			String owner = targetServer.userName;
 			sendLogModeratorMessage(bold(userInfo(sender)) + " requests kill of " + bold(owner) + "'s server on port "+ bold(portString));
 			targetServer.killServer();
 		}
@@ -667,28 +667,22 @@ public class Bot implements ServerManager {
 						break;
 				}
 				if (isAccountTypeOf(userLevel, REGISTERED)) {
+					String nick = member.nick();
+					if (nick == null) {
+						nick = member.asMention();
+					}
 					switch (keywords[0].toLowerCase()) {
 						case ".getinfo":
 							processServerInfo(userLevel, keywords, channel, member);
 							break;
 						case ".host":
-							processHost(userLevel, channel, member.id(), message.substring(".host".length()), getMinPort());
+							processHost(userLevel, channel, nick, member.id(), message.substring(".host".length()), getMinPort());
 							break;
 						case ".kill":
 							processKill(userLevel, keywords, member, channel, channel);
 							break;
 						case ".killmine":
 							processKillMine(member, channel);
-							break;
-						case ".load":
-							MySQL.loadSlot(member.id(), keywords, userLevel, channel);
-							break;
-						case ".save":
-							channel.sendMessage("Please update slots at " + cfg_data.website_link + "/account");
-//						MySQL.saveSlot(hostname, keywords);
-							break;
-						case ".slot":
-							MySQL.showSlot(member.id(), keywords, channel);
 							break;
 //					case ".query":
 //						handleQuery(keywords);
@@ -1160,7 +1154,7 @@ public class Bot implements ServerManager {
 	 * @param hostname IRC data associated with the sender
 	 * @param message The entire message to be processed
 	 */
-	public void processHost(AccountType userLevel, MessageChannel channel, String hostname, String message, int port) throws InputException {
+	public void processHost(AccountType userLevel, MessageChannel channel, String userName, String hostname, String message, int port) throws InputException {
 		logMessage(LOGLEVEL_NORMAL, "Processing the host command for " + hostname + " with the message \"" + message + "\".");
 		if (botEnabled || isAccountTypeOf(userLevel, ADMIN)) {
 			boolean autoRestart = (message.contains("autorestart=true") || message.contains("autorestart=on"));
@@ -1173,7 +1167,7 @@ public class Bot implements ServerManager {
 						this,
 						cfg_data,
 						versionParser,
-						channel,
+						userName,
 						hostname,
 						arguments,
 						userLevel,
@@ -1450,7 +1444,7 @@ public class Bot implements ServerManager {
 				if (Functions.isInteger(keywords[1])) {
 					Server s = getServer(Integer.parseInt(keywords[1]));
 					if (s != null)
-						channel.sendMessage("The owner of port " + keywords[1] + " is: " + s.sender + "[" + s.userId + "].");
+						channel.sendMessage("The owner of port " + keywords[1] + " is: " + s.userName + "[" + s.userId + "].");
 					else
 						channel.sendMessage("There is no server running on " + keywords[1] + ".");
 				} else
@@ -1502,7 +1496,7 @@ public class Bot implements ServerManager {
 					if (s != null) {
 						boolean isHoster = s.userId.equals(hostname.id());
 						if (isHoster || isAccountTypeOf(userLevel, MODERATOR)) {
-							String logSender = (isHoster ? "their own" : bold(s.sender) + "'s");
+							String logSender = (isHoster ? "their own" : bold(s.userName) + "'s");
 							String logStr = bold(userInfo(hostname)) + " requests server info for " + logSender + " server on port " + port;
 							
 							channel.sendMessage("Log File: " + cfg_data.static_link + "/logs/" + s.server_id + ".txt");

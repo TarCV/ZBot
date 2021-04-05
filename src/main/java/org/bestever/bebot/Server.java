@@ -18,17 +18,20 @@
 
 package org.bestever.bebot;
 
-import com.mewna.catnip.entity.channel.MessageChannel;
-
 import java.io.File;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.security.NoSuchAlgorithmException;
-import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import static org.bestever.bebot.Functions.getWadAbsolutePath;
 import static org.bestever.bebot.Logger.LOGLEVEL_CRITICAL;
 import static org.bestever.bebot.Logger.logMessage;
 
@@ -104,23 +107,12 @@ public class Server {
 	/**
 	 * Username of the person who sent the command to start it
 	 */
-	public String sender;
-
-	/**
-	 * The channel it was hosted from
-	 */
-	public MessageChannel channel;
+	public String userName;
 
 	/**
 	 * This is the host's hostname on irc
 	 */
 	public String userId;
-	public String alt_hostname;
-
-	/**
-	 * This is the login name used
-	 */
-	public String irc_login;
 
 	/**
 	 * Contains the entire ".host" command
@@ -133,11 +125,6 @@ public class Server {
 	public AccountType user_level;
 
 	/**
-	 * The type of executable (do we run normal zandronum, or kpatch, or devrepo...etc)
-	 */
-	public String executableType;
-
-	/**
 	 * Contains the hostname used, this will NOT contain " :: [BE] New York "
 	 */
 	public String servername;
@@ -148,14 +135,31 @@ public class Server {
 	public String iwad;
 
 	/**
-	 * This sets the starting map
+	 * This sets the map rotation list
 	 */
-	public String map;
+	public final List<String> maps = new ArrayList<>();
 	
 	/**
 	 * Contains the gamemode
 	 */
-	public String gamemode;
+	public OdamexGameModes gameMode = OdamexGameModes.COOP;
+
+	enum OdamexGameModes {
+		COOP("+sv_skill","4","+g_lives","0","+g_lives_jointimer","30","+g_rounds","0","+sv_forcerespawn","0","+sv_gametype","0","+sv_nomonsters","0"),
+		CTF( "+sv_teamsinplay","2","+sv_timelimit","10","+sv_scorelimit","5","+g_lives","0","+g_rounds","0","+sv_forcerespawn","0","+sv_friendlyfire","0","+sv_gametype","3","+sv_nomonsters","1","+sv_skill","5"),
+		DM( "+sv_timelimit","10","+sv_fraglimit","30","+g_lives","0","+g_rounds","0","+sv_forcerespawn","0","+sv_gametype","1","+sv_nomonsters","1","+sv_skill","5"),
+		DUEL( "+sv_timelimit","10","+sv_fraglimit","30","+g_lives","0","+g_rounds","0","+g_winnerstays","1","+sv_forcerespawn","1","+sv_forcerespawntime","10","+sv_gametype","1","+sv_maxplayers","2","+sv_nomonsters","1","+sv_skill","5","+sv_warmup","1","+sv_warmup_autostart","0"),
+		LMS( "+g_lives","1","+g_winlimit","5","+g_lives_jointimer","0","+g_rounds","1","+sv_forcerespawn","1","+sv_gametype","1","+sv_nomonsters","1","+sv_skill","5"),
+		SURVIVAL( "+g_lives","3","+sv_skill","4","+g_lives_jointimer","30","+g_rounds","0","+sv_forcerespawn","1","+sv_gametype","0","+sv_nomonsters","0"),
+		TDM( "+sv_timelimit","10","+sv_fraglimit","50","+g_lives","0","+g_rounds","0","+sv_forcerespawn","0","+sv_friendlyfire","0","+sv_gametype","2","+sv_nomonsters","1","+sv_skill","5"),
+		TLMS( "+sv_teamsinplay","2","+g_lives","1","+g_winlimit","5","+g_lives_jointimer","0","+g_rounds","1","+sv_forcerespawn","1","+sv_friendlyfire","0","+sv_gametype","2","+sv_nomonsters","1","+sv_skill","5");
+
+		final List<String> commands;
+
+		OdamexGameModes(String... commands) {
+			this.commands = Arrays.asList(commands);
+		}
+	}
 
 	/**
 	 * The name of the config file (like rofl.cfg), will contain ".cfg" on the end of the string
@@ -165,67 +169,82 @@ public class Server {
 	/**
 	 * Contains a list of all the wads used by the server separated by a space
 	 */
-	public List<String> wads;
-
-	/**
-	 * Contains a list of all the optional wads used by the server separated by a space
-	 */
-	public ArrayList<String> optwads;
-
-	/**
-	 * Contains a list of all the wads separated by a space which will be searched for maps
-	 */
-	public String[] mapwads;
+	public final List<String> wads = new ArrayList<>();
 
 	/**
 	 *  Holds the skill of the game
 	 */
-	public int skill = -1;
+	public OdamexSkill skill = OdamexSkill.DEFAULT;
+	enum OdamexSkill {
+		DEFAULT(-1),
+		IM_TOO_YOUNG_TO_DIE(1),
+		HEY_NOT_TOO_ROUGH(2),
+		HURT_ME_PLENTY(3),
+		ULTRA_VIOLENCE(4),
+		NIGHTMARE(5);
 
-	/**
-	 * If this is true, that means skulltag data will be enabled
-	 */
-	public boolean enable_skulltag_data;
+		final int number;
 
-	/**
-	 * If this is true, instagib will be enabled on the server
-	 */
-	public boolean instagib;
-
-	/**
-	 * If this is true, buckshot will be enabled on the server
-	 */
-	public boolean buckshot;
-
-	/**
-	 * Contains flags for the server
-	 */
-	public int dmflags;
+		OdamexSkill(int number) {
+			this.number = number;
+		}
+	}
 
 	/**
 	 * Contains flags for the server
 	 */
-	public int dmflags2;
+	public final Set<OdamexFlags> addFlags = new HashSet<>();
+	public final Set<OdamexFlags> removeFlags = new HashSet<>();
 
-	/**
-	 * Contains flags for the server
-	 */
-	public int zadmflags;
+	enum OdamexFlags {
+		DMFARSPAWN("dmfarspawn", "sv_dmfarspawn"),
+		CALLVOTE_SCORELIMIT("callvote_scorelimit", "sv_callvote_scorelimit"),
+		CALLVOTE_FRAGLIMIT("callvote_fraglimit", "sv_callvote_fraglimit"),
+		CALLVOTE_RESTART("callvote_restart", "sv_callvote_restart"),
+		CALLVOTE_RANDPICKUP("callvote_randpickup", "sv_callvote_randpickup"),
+		CALLVOTE_RANDCAPS("callvote_randcaps", "sv_callvote_randcaps"),
+		CALLVOTE_RANDMAP("callvote_randmap", "sv_callvote_randmap"),
+		CALLVOTE_NEXTMAP("callvote_nextmap", "sv_callvote_nextmap"),
+		CALLVOTE_MAP("callvote_map", "sv_callvote_map"),
+		CALLVOTE_FORCESTART("callvote_forcestart", "sv_callvote_forcestart"),
+		CALLVOTE_FORCESPEC("callvote_forcespec", "sv_callvote_forcespec"),
+		CALLVOTE_KICK("callvote_kick", "sv_callvote_kick"),
+		CALLVOTE_COINFLIP("callvote_coinflip", "sv_callvote_coinflip"),
+		VOTE_SPECVOTE("vote_specvote", "sv_vote_specvote"),
+		VOTE_SPECCALL("vote_speccall", "sv_vote_speccall"),
+		VOTE_COUNTABS("vote_countabs", "sv_vote_countabs"),
+		UNBLOCKPLAYERS("unblockplayers", "sv_unblockplayers"),
+		FORCERESPAWN("forcerespawn", "sv_forcerespawn"),
+		ALLOWSHOWSPAWNS("allowshowspawns", "sv_allowshowspawns"),
+		ALLOWWIDESCREEN("allowwidescreen", "sv_allowwidescreen"),
+		ALLOWPWO("allowpwo", "sv_allowpwo"),
+		ALLOWREDSCREEN("allowredscreen", "sv_allowredscreen"),
+		ALLOWMOVEBOB("allowmovebob", "sv_allowmovebob"),
+		SHAREKEYS("sharekeys", "sv_sharekeys"),
+		KEEPKEYS("keepkeys", "sv_keepkeys"),
+		WEAPONSTAY("weaponstay", "sv_weaponstay"),
+		NOMONSTERS("nomonsters", "sv_nomonsters"),
+		MONSTERSRESPAWN("monstersrespawn", "sv_monstersrespawn"),
+		RESPAWNSUPER("respawnsuper", "sv_respawnsuper"),
+		ITEMSRESPAWN("itemsrespawn", "sv_itemsrespawn"),
+		INFINITEAMMO("infiniteammo", "sv_infiniteammo"),
+		FRAGEXITSWITCH("fragexitswitch", "sv_fragexitswitch"),
+		ALLOWTARGETNAMES("allowtargetnames", "sv_allowtargetnames"),
+		FREELOOK("freelook", "sv_freelook"),
+		FORCEWATER("forcewater", "sv_forcewater"),
+		DOUBLEAMMO("doubleammo", "sv_doubleammo"),
+		ALLOWJUMP("allowjump", "sv_allowjump"),
+		ALLOWEXIT("allowexit", "sv_allowexit"),
+		FRIENDLYFIRE("friendlyfire", "sv_friendlyfire");
 
-	/**
-	 * Contains flags for the server
-	 */
-	public int compatflags;
+		public final String argumentName;
+		final String odamexName;
 
-	/**
-	 * Contains flags for the server
-	 */
-	public int zacompatflags;
-
-	/**
-	 * Contains the play_time in percentage
-	 */
-	public long play_time = 0;
+		OdamexFlags(String argumentName, String odamexName) {
+			this.argumentName = argumentName;
+			this.odamexName = odamexName;
+		}
+	}
 
 	/**
 	 * Contains the RCON Password
@@ -242,22 +261,17 @@ public class Server {
 	 */
 	public boolean being_killed = false;
 	public boolean being_killed_by_owner = false;
-	
-	/**
-	 * If there's an error with processing of numbers, return this
-	 */
-	public static final int FLAGS_ERROR = 0xFFFFFFFF;
 
 	/**
 	 * This is the time of a day in milliseconds
 	 */
-	public static final long DAY_MILLISECONDS = 1000 * 60 * 60 * 24;
+	public static final long DAY_MILLISECONDS = 1000L * 60 * 60 * 24;
 	public ServerManager manager;
 
 	/**
 	 * Default constructor for building a server
 	 */
-	public Server() {
+	private Server() {
 		// Purposely empty
 	}
 
@@ -276,16 +290,12 @@ public class Server {
 	 * @param message The message sent
 	 * @param userLevel
 	 */
-	public static void handleHostCommand(MessageReceiver botReference, ServerManager serverManager, ConfigData cfg_data, VersionParser versionParser, MessageChannel channel, String userId, Map<String, String> message, AccountType userLevel, boolean autoRestart, int port, String id, boolean recovering) throws InputException {
+	public static void handleHostCommand(MessageReceiver botReference, ServerManager serverManager, ConfigData cfg_data, VersionParser versionParser, String userName, String userId, Map<String, String> message, AccountType userLevel, boolean autoRestart, int port, String id, boolean recovering) throws InputException {
 		Server server = new Server();
 
 		// Reference server to bot
 		server.bot = botReference;
 		server.manager = serverManager;
-
-		// Initialize the wad arraylist
-		server.wads = new ArrayList<>();
-		server.optwads = new ArrayList<>();
 
 		// Check if autoRestart was enabled
 		server.auto_restart = autoRestart;
@@ -293,8 +303,8 @@ public class Server {
 		server.temp_port = port;
 
 		// Input basic values
-		server.channel = channel;
 		server.userId = userId;
+		server.userName = userName;
 		server.host_command = message;
 		server.user_level = userLevel;
 
@@ -320,52 +330,30 @@ public class Server {
 						return;
 					}
 				}
-				case "buckshot" -> {
-					server.buckshot = handleTrue(value);
-				}
-				case "compatflags" -> {
-					server.compatflags = handleGameFlags(value);
-					if (server.compatflags == FLAGS_ERROR) {
-						throw new InputException("Problem with parsing compatflags");
-					}
-				}
-				case "zacompatflags" -> {
-					server.zacompatflags = handleGameFlags(value);
-					if (server.compatflags == FLAGS_ERROR) {
-						throw new InputException("Problem with parsing zacompatflags");
-					}
-				}
 				case "config" -> {
 					if (!server.checkConfig(cfg_data.bot_cfg_directory_path + Functions.cleanInputFile(value.toLowerCase()))) {
 						throw new InputException("Config file '" + value + "' does not exist.");
 					}
 					server.config = Functions.cleanInputFile(value.toLowerCase());
 				}
-				case "data", "stdata" -> server.enable_skulltag_data = handleTrue(value);
-				case "dmflags" -> {
-					server.dmflags = handleGameFlags(value);
-					if (server.dmflags == FLAGS_ERROR) {
-						throw new InputException("Problem with parsing dmflags");
-					}
-				}
-				case "dmflags2" -> {
-					server.dmflags2 = handleGameFlags(value);
-					if (server.dmflags2 == FLAGS_ERROR) {
-						throw new InputException("Problem with parsing dmflags2");
-					}
-				}
-				case "zadmflags" -> {
-					server.zadmflags = handleGameFlags(value);
-					if (server.zadmflags == FLAGS_ERROR) {
-						throw new InputException("Problem with parsing zadmflags");
-					}
-				}
-				case "gamemode" -> server.gamemode = getGamemode(value);
+				case "gamemode" -> server.gameMode = getGamemode(value);
 				case "hostname" -> server.servername = value;
-				case "instagib" -> server.instagib = handleTrue(value);
 				case "iwad" -> server.iwad = getIwad(Functions.cleanInputFile(value));
-				case "map" -> server.map = value;
-				case "mapwad" -> server.mapwads = addWads(value);
+				case "maps" -> server.maps.addAll(Arrays.asList(value.split(",")));
+				case "mapwad" -> {
+					final String path = getWadAbsolutePath(value, cfg_data);
+					final DoomFile doomFile;
+					try {
+						doomFile = new DoomFile(path);
+					} catch (IOException e) {
+						e.printStackTrace();
+						throw new InputException("The passed wad is unknown");
+					}
+
+					final List<String> mapsFromWads = doomFile.levelNames;
+					server.wads.add(value);
+					server.maps.addAll(mapsFromWads);
+				}
 				case "port" -> {
 					if (Functions.checkValidPort(value))
 						server.temp_port = Integer.parseInt(value);
@@ -378,29 +366,20 @@ public class Server {
 				}
 				case "skill" -> {
 					server.skill = handleSkill(value);
-					if (server.skill == -1) {
-						throw new InputException("Skill must be between 0-4");
-					}
 				}
 				case "wad", "file", "wads", "files" -> {
-					String[] wadArray = addWads(value);
-					if (wadArray.length > 0) {
-						server.wads.addAll(Arrays.asList(wadArray));
-					}
-					if (!MySQL.checkHashes(server.wads.toArray(new String[wadArray.length])))
-						return;
-				}
-				case "optionalwad", "optwad", "opt", "optfile", "optionalwads", "optwads", "opts", "optfiles" -> {
-					String[] wadArray2 = addWads(value);
-					if (wadArray2.length > 0) {
-						for (String wad : wadArray2)
-							if (!server.optwads.contains(wad)) server.optwads.add(wad);
-					}
-					if (!MySQL.checkHashes(server.optwads.toArray(new String[wadArray2.length])))
-						return;
+					List<String> wadArray = addWads(value);
+					server.wads.addAll(wadArray);
+					if (!MySQL.checkHashes(server.wads.toArray(new String[0])))
+						throw new InputException("There were disallowed wads");
 				}
 				default -> {
-					throw new InputException(MessageFormat.format("Unknown option ''{0}''", key));
+					final OdamexFlags flag = getFlag(key);
+					if (handleTrue(value)) {
+						server.addFlags.add(flag);
+					} else {
+						server.removeFlags.add(flag);
+					}
 				}
 			}
 		}
@@ -423,22 +402,11 @@ public class Server {
 			}
 		}
 
-		// Check if the optional WADs exist
-		if (server.optwads != null) {
-			for (int i = 0; i < server.optwads.size(); i++) {
-				if (!Functions.fileExists(cfg_data.bot_wad_directory_path + server.optwads.get(i))) {
-					throw new InputException("File '" + server.optwads.get(i) + "' does not exist!");
-				}
-			}
-		}
-
 		// Now that we've indexed the string, check to see if we have what we need to start a server
 		if (server.iwad == null) {
 			throw new InputException("You are missing an iwad, or have specified an incorrect iwad. You can add it by appending: iwad=your_iwad");
 		}
-		if (server.gamemode == null) {
-			server.gamemode = "cooperative";
-		}
+
 		if (server.servername == null) {
 			throw new InputException("You are missing the hostname, or your hostname syntax is wrong. You can add it by appending: hostname=\"Your Server Name\"");
 		}
@@ -464,17 +432,20 @@ public class Server {
 			server.rcon_password = server.server_id.substring(0, mid);
 			server.server_password = server.server_id.substring(mid);
 		}
-		
-		// Warn if using Strife Cooperative
-		if (server.iwad.equals("strife1.wad") && (server.gamemode.equals("cooperative") || server.gamemode.equals("survival") || server.gamemode == null)) {
-			server.bot.onMessage("Note: Strife Cooperative is not fully supported by Zandronum");
-		}
-					
+
 		// Assign and start a new thread
 		server.recovering = recovering;
 		server.serverprocess = new ServerProcess(server, cfg_data);
 		server.serverprocess.start();
 		MySQL.logServer(server.servername, server.server_id, server.userId);
+	}
+
+	private static OdamexFlags getFlag(String key) throws InputException {
+		final String flagName = key.substring(1);
+		return Stream.of(OdamexFlags.values())
+				.filter(flag -> flag.argumentName.equalsIgnoreCase(flagName))
+				.findAny()
+				.orElseThrow(() -> new InputException("Unknown flag " + flagName));
 	}
 
 	/**
@@ -568,24 +539,24 @@ public class Server {
 	 * @param skill String - skill level
 	 * @return int - skill level
 	 */
-	private static int handleSkill(String skill) {
+	private static OdamexSkill handleSkill(String skill) throws InputException {
 		if (!Functions.isInteger(skill) || Integer.parseInt(skill) > 4 || Integer.parseInt(skill) < 0) {
-			return -1;
+			throw new InputException("Incorrect skill number (should be 0-4)");
 		}
 		else
-			return Integer.parseInt(skill);
+			return OdamexSkill.values()[Integer.parseInt(skill)];
 	}
 
 	/**
 	 * Returns an array of wads from a String
-	 * @param wad comma-seperated list of wads
+	 * @param wads comma-seperated list of wads
 	 * @return array of wads
 	 */
-	private static String[] addWads(String wad) {
-		String[] wads = wad.split(",");
-		for (int i = 0; i < wads.length; i++)
-			wads[i] = wads[i].trim().toLowerCase();
-		return wads;
+	private static List<String> addWads(String wads) {
+		return Stream.of(wads.split(","))
+				.map(wad -> wad.trim().toLowerCase())
+				.filter(wad -> !wad.isEmpty())
+				.collect(Collectors.toList());
 	}
 
 	/**
@@ -708,66 +679,43 @@ public class Server {
 	/**
 	 * Takes input to parse the gamemode
 	 * @param string The keyword to check with the = sign (ex: gamemode=...)
-	 * @return A string of the gamemode, null if there was no such gamemode
+	 * @return A string of the gamemode, throw if there was no such gamemode
 	 */
-	private static String getGamemode(String string) {
+	private static OdamexGameModes getGamemode(String string) throws InputException {
 		// Find out if the string we're given matches a game mode
 		switch (string.toLowerCase())
 		{
 			case "deathmatch":
 			case "dm":
 			case "ffa":
-				return "deathmatch";
+				return OdamexGameModes.DM;
 			case "ctf":
 			case "capturetheflag":
-				return "ctf";
+				return OdamexGameModes.CTF;
 			case "tdm":
 			case "teamdm":
 			case "tdeathmatch":
 			case "teamdeathmatch":
-				return "teamplay";
-			case "term":
-			case "terminator":
-				return "terminator";
-			case "pos":
-			case "possession":
-				return "possession";
-			case "tpos":
-			case "teampossession":
-				return "teampossession";
+				return OdamexGameModes.TDM;
 			case "lms":
 			case "lastmanstanding":
-				return "lastmanstanding";
+				return OdamexGameModes.LMS;
 			case "tlms":
 			case "teamlms":
 			case "teamlastmanstanding":
-				return "teamlms";
-			case "skulltag":
-			case "st":
-				return "skulltag";
+				return OdamexGameModes.TLMS;
 			case "duel":
-				return "duel";
-			case "teamgame":
-				return "teamgame";
+				return OdamexGameModes.DUEL;
 			case "domination":
-			case "dom":
-				return "domination";
 			case "coop":
 			case "co-op":
 			case "cooperative":
-				return "cooperative";
+				return OdamexGameModes.COOP;
 			case "survival":
-				return "survival";
-			case "inv":
-			case "invasion":
-				return "invasion";
-			case "ofctf":
-			case "oneflagctf":
-				return "oneflagctf"; // NEEDS SUPPORT (please check)
+				return OdamexGameModes.SURVIVAL;
 		}
 
-		// If the gametype is unknown, return cooperative
-		return "cooperative";
+		throw new InputException("Unknown or supported game mode");
 	}
 
 	/**
@@ -777,26 +725,9 @@ public class Server {
 	 */
 	private static boolean handleTrue(String string) {
 		return switch (string.toLowerCase()) {
-			case "on", "true", "yes", "enable" -> true;
+			case "on", "true", "yes", "enable", "1" -> true;
 			default -> false;
 		};
-	}
-
-	/**
-	 * This handles dmflags/compatflags, returns 0xFFFFFFFF if there's an error (FLAGS_ERROR)
-	 * @param keyword The keyword to check
-	 * @return A number of what it is
-	 */
-	private static int handleGameFlags(String keyword) {
-		// If the right side is numeric and passes some logic checks, return that as the flag
-		int flag = 0;
-		if (Functions.isInteger(keyword))
-			flag = Integer.parseInt(keyword);
-		if (flag >= 0)
-			return flag;
-
-		// If something went wrong, return an error
-		return FLAGS_ERROR;
 	}
 
 	/**
@@ -808,39 +739,19 @@ public class Server {
 	public String getField(String fieldToGet) {
 		switch (fieldToGet.toLowerCase()) {
 			case "autorestart":
-				return "autorestart: " + Boolean.toString(this.auto_restart);
-			case "buckshot":
-				return "buckshot: " + Boolean.toString(this.buckshot);
-			case "compatflags":
-				return "compatflags: " + Integer.toString(this.compatflags);
-			case "zacompatflags":
-				return "zacompatflags: " + Integer.toString(this.zacompatflags);
+				return "autorestart: " + this.auto_restart;
 			case "config":
 			case "cfg":
 			case "configuration":
 				return "config: " + nullToNone(this.config);
-			case "data":
-			case "enable_skulltag_data":
-			case "stdata":
-			case "skulltag_data":
-			case "skulltagdata":
-				return "data: " + Boolean.toString(this.enable_skulltag_data);
-			case "dmflags":
-				return "dmflags: " + Integer.toString(this.dmflags);
-			case "dmflags2":
-				return "dmflags2 " + Integer.toString(this.dmflags2);
-			case "zadmflags":
-				return "zadmflags " + Integer.toString(this.zadmflags);
 			case "gamemode":
 			case "gametype":
-				return "gamemode " + this.gamemode;
+				return "gamemode " + this.gameMode;
 			case ".host":
 			case "host":
 			case "hostcommand":
 			case "host_command":
 				return "hostcommand: " + this.host_command;
-			case "instagib":
-				return "instagib: " + Boolean.toString(this.instagib);
 			case "iwad":
 				return "iwad: " + this.iwad;
 			case "name":

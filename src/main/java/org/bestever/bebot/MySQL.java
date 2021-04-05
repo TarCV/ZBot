@@ -443,7 +443,7 @@ public class MySQL {
 	 * @param level Int - their user level
 	 * @param channel String - the channel
 	 */
-	public static void loadSlot(String hostname, String[] words, AccountType level, MessageChannel channel) throws InputException {
+	public static void loadSlot(String userName, String hostname, String[] words, AccountType level, MessageChannel channel) throws InputException {
 		if (words.length == 2) {
 			if (Functions.isInteger(words[1])) {
 				int slot = Integer.parseInt(words[1]);
@@ -459,7 +459,7 @@ public class MySQL {
 						ResultSet r = pst.executeQuery();
 						if (r.next()) {
 							String hostCommand = r.getString("serverstring");
-							bot.processHost(level, channel, hostname, hostCommand, bot.getMinPort());
+							bot.processHost(level, channel, userName, hostname, hostCommand, bot.getMinPort());
 						} else {
 							bot.sendMessage(channel, "You do not have anything saved to that slot!");
 						}

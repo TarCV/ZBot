@@ -81,7 +81,7 @@ public class IPIntel implements Runnable {
 			}
 			MySQL.addKnownIP(ip);
 			if (response >= minResult) {
-				logger.error(bold(name)+" with ip "+bold(ip)+" was kicked from " + bold(server.sender) + "'s server "+ bold(server.servername) +" on port "+bold(server.port)+" as they're suspected of being behind a proxy");
+				logger.error(bold(name)+" with ip "+bold(ip)+" was kicked from " + bold(server.userName) + "'s server "+ bold(server.servername) +" on port "+bold(server.port)+" as they're suspected of being behind a proxy");
 				server.executeCommand("addban " + ip + " 10minute " + "\"\\ciBanned from all " + configData.service_short + " servers on suspicion of using a proxy.\"");
 				if (MySQL.addBan(ip, "Proxy (IPIntel)", "<bot>")) {
 					logger.info("Proxy IP " + bold(ip) + " was added to the banlist");

@@ -29,7 +29,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -74,11 +73,11 @@ public class Functions {
 	/**
 	 * Removes duplicates from an arraylist by casting to a set
 	 * @param l ArrayList - the list
-	 * @return cleaned ArrayList
 	 */
-	public static List<String> removeDuplicateWads(List<String> l) {
+	public static void removeDuplicateWads(List<String> l) {
 		Set<String> setItems = new HashSet<>(l);
-		return new ArrayList<>(setItems);
+		l.clear();
+		l.addAll(setItems);
 	}
 
 	/**
@@ -216,13 +215,16 @@ public class Functions {
 		return input.replace("/", "").trim();
 	}
 
-	static String absolutePath(String path) {
-        return new File(path).getAbsolutePath();
-    }
-
-    static void createDirectoryAndFile(File file) throws IOException {
+	static void createDirectoryAndFile(File file) throws IOException {
         final Path path = file.toPath();
         Files.createDirectories(path.getParent());
         Files.createFile(path);
+    }
+
+    public static String getWadAbsolutePath(String wad, ConfigData cfgData) {
+        if (Server.isIwad(wad))
+            return new File(cfgData.bot_iwad_directory_path, wad).getAbsolutePath();
+        else
+            return new File(cfgData.bot_wad_directory_path, wad).getAbsolutePath();
     }
 }
