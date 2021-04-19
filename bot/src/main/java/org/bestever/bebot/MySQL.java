@@ -437,45 +437,6 @@ public class MySQL {
 	}
 
 	/**
-	 * Loads server saved with the .save command
-	 * @param hostname String - their hostname
-	 * @param words String[] - their message
-	 * @param level Int - their user level
-	 * @param channel String - the channel
-	 */
-	public static void loadSlot(String userName, String hostname, String[] words, AccountType level, MessageChannel channel) throws InputException {
-		if (words.length == 2) {
-			if (Functions.isInteger(words[1])) {
-				int slot = Integer.parseInt(words[1]);
-				if (slot > 10 || slot < 1) {
-					bot.sendMessage(channel, "Slot must be between 1 and 10.");
-					return;
-				}
-				try (Connection con = getConnection()) {
-					String query = "SELECT `serverstring` FROM " + mysql_db + ".`save` WHERE `slot` = ? && `username` = ?";
-					try (PreparedStatement pst = con.prepareStatement(query)) {
-						pst.setInt(1, slot);
-						pst.setString(2, hostname);
-						ResultSet r = pst.executeQuery();
-						if (r.next()) {
-							String hostCommand = r.getString("serverstring");
-							bot.processHost(level, channel, userName, hostname, hostCommand, bot.getMinPort());
-						} else {
-							bot.sendMessage(channel, "You do not have anything saved to that slot!");
-						}
-					}
-				}
-				catch (SQLException e) {
-					Logger.logMessage(LOGLEVEL_IMPORTANT, "SQL Error in 'loadSlot()'");
-					e.printStackTrace();
-				}
-			}
-		}
-		else
-			bot.sendMessage(channel, "Incorrect syntax! Correct syntax is .load 1 to 10");
-	}
-
-	/**
 	 * Logs a server to the database
 	 * @param servername String - the name of the server
 	 * @param unique_id String - the server's unique ID

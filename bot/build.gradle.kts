@@ -1,4 +1,5 @@
 plugins {
+    kotlin("jvm") version "1.4.32"
     application
 }
 
@@ -13,6 +14,17 @@ dependencies {
     implementation("javax.json:javax.json-api:1.1.4")
     implementation("org.glassfish:javax.json:1.1.4")
     implementation("com.google.guava:guava:30.1-jre")
+    implementation(project(":vendor:natural-cli"))
 
     testImplementation("junit:junit:4.12")
+
+    implementation(kotlin("stdlib-jdk8"))
+}
+val compileKotlin: org.jetbrains.kotlin.gradle.tasks.KotlinCompile by tasks
+compileKotlin.kotlinOptions {
+    jvmTarget = "15"
+}
+val compileTestKotlin: org.jetbrains.kotlin.gradle.tasks.KotlinCompile by tasks
+compileTestKotlin.kotlinOptions {
+    jvmTarget = "15"
 }

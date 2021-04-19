@@ -56,7 +56,6 @@ classes/
 
 bestbot.log
 
-vendor
 *.log
 phpMyAdmin*
 

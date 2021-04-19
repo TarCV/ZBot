@@ -20,7 +20,7 @@ package org.bestever.bebot;
 
 import java.util.Arrays;
 
-enum AccountType {
+public enum AccountType {
 	/**
 	 * Not a ZBot user. A guest and means it was not found; also returns this if not logged in
 	 */

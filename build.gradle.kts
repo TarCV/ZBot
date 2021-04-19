@@ -1,5 +1,4 @@
 plugins {
-    application
     id("org.sonarqube").version("3.1.1")
 }
 

@@ -33,6 +33,7 @@ import com.mewna.catnip.entity.user.User;
 import com.mewna.catnip.shard.DiscordEvent;
 import com.mewna.catnip.shard.GatewayIntent;
 import org.bestever.serverquery.QueryManager;
+import org.naturalcli.ParseResult;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -51,7 +52,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Timer;
@@ -143,9 +143,13 @@ public class Bot implements ServerManager {
 
 	private String guildId;
 
+	private final Conversation mainConversation = new BotConversation(this);
+
 	/**
 	 * Set the bot up with the constructor
 	 */
+
+
 	public Bot(ConfigData cfgfile) {
 		// Point our config data to what we created back in RunMe.java
 		cfg_data = cfgfile;
@@ -259,7 +263,7 @@ public class Bot implements ServerManager {
 	/**
 	 * Reloads the configuration file
 	 */
-	public void reloadConfigFile() {
+	void reloadConfigFile(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
 		try {
 			this.cfg_data = new ConfigData(this.config_file);
 		} catch (IOException e) {
@@ -456,9 +460,9 @@ public class Bot implements ServerManager {
 	 */
 /*
 	private void toggleAutoRestart(String[] keywords, String channel) {
-		if (keywords.length == 2) {
-			if (Functions.isNumeric(keywords[1])) {
-				Server s = getServer(Integer.parseInt(keywords[1]));
+		if (parseResult.getParameterCount() == 2) {
+			if (Functions.isNumeric(parseResult.getParameterString(1))) {
+				Server s = getServer(Integer.parseInt(parseResult.getParameterString(1)));
 				if (s.auto_restart) {
 					s.auto_restart = false;
 					channel.sendMessage("Autorestart disabled on server.");
@@ -478,22 +482,22 @@ public class Bot implements ServerManager {
 	 * @param keywords String[] - array of words in message sent
 	 * @param channel
 	 */
-	private void protectServer(String[] keywords, MessageChannel channel) {
-		if (keywords.length == 2) {
-			if (Functions.isInteger(keywords[1])) {
-				Server s = getServer(Integer.parseInt(keywords[1]));
+	void protectServer(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
+		if (parseResult.getParameterCount() == 2) {
+			if (Functions.isInteger(String.valueOf(parseResult.getParameterValue(1 - 1)))) {
+				Server s = getServer(Integer.parseInt(String.valueOf(parseResult.getParameterValue(1 - 1))));
 				if (s.protected_server) {
 					s.protected_server = false;
-					channel.sendMessage("Kill protection disabled.");
+					context.channel.sendMessage("Kill protection disabled.");
 				}
 				else {
 					s.protected_server = true;
-					channel.sendMessage("Kill protection enabled.");
+					context.channel.sendMessage("Kill protection enabled.");
 				}
 			}
 		}
 		else
-			channel.sendMessage("Correct usage is .protect <port>");
+			context.channel.sendMessage("Correct usage is .protect <port>");
 	}
 
 	/**
@@ -501,20 +505,20 @@ public class Bot implements ServerManager {
 	 * @param keywords String[] - array of words in message sent
 	 * @param sender
 	 */
-	private void globalBroadcast(String[] keywords, Member sender, MessageChannel channel) {
-		if (keywords.length > 1) {
+	void globalBroadcast(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
+		if (parseResult.getParameterCount() > 1) {
 			if (servers != null) {
-				String message = String.join(" ", Arrays.copyOfRange(keywords, 1, keywords.length));
+				String message = String.valueOf(parseResult.getParameterValue(0 - 1));
 				for (Server s : servers) {
 					s.in.flush(); s.in.println("say \"\\cf--------------\\cc\";\n");
 					s.in.flush(); s.in.println("say \"GLOBAL ANNOUNCEMENT: " + Functions.escapeQuotes(message) + "\";\n");
 					s.in.flush(); s.in.println("say \"\\cf--------------\\cc\";\n");
 				}
-				channel.sendMessage("Global broadcast sent.");
-				sendLogModeratorMessage(bold(userInfo(sender)) + " sends global announcement: " + message);
+				context.channel.sendMessage("Global broadcast sent.");
+				sendLogModeratorMessage(bold(userInfo(context.member)) + " sends global announcement: " + message);
 			}
 			else {
-				channel.sendMessage("There are no servers running at the moment.");
+				context.channel.sendMessage("There are no servers running at the moment.");
 			}
 		}
 	}
@@ -526,50 +530,50 @@ public class Bot implements ServerManager {
 	 * @param keywords String[] - message
 	 * @param hostname
 	 */
-	private void sendCommand(AccountType level, String[] keywords, Member hostname, MessageChannel channel) {
-		if (keywords.length > 2) {
-			if (Functions.isInteger(keywords[1])) {
-				int port = Integer.parseInt(keywords[1]);
+	void sendCommand(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
+		if (parseResult.getParameterCount() > 2) {
+			if (Functions.isInteger(String.valueOf(parseResult.getParameterValue(1 - 1)))) {
+				int port = Integer.parseInt(String.valueOf(parseResult.getParameterValue(1 - 1)));
 				Server s = getServer(port);
 				if (s != null) {
-					boolean isHoster = s.userId.equals(hostname.id());
-					if (isHoster || isAccountTypeOf(level, MODERATOR)) {
-						String entireMessage = String.join(" ", Arrays.copyOfRange(keywords, 2, keywords.length));
+					boolean isHoster = s.userId.equals(context.member.id());
+					if (isHoster || isAccountTypeOf(context.level, MODERATOR)) {
+						String entireMessage = String.valueOf(parseResult.getParameterValue(2 - 1));
 						String thisMessage = entireMessage.split(";")[0]; // Only send the first message because stacked messages break somehow.. :/
 						thisMessage = thisMessage.replaceAll("^\\s+","");
 						String[] thisKeywords = thisMessage.split(" ");
-						String command = thisKeywords[0];
+						String command = String.valueOf(parseResult.getParameterValue(0 - 1));
 						String args = String.join(" ", Arrays.copyOfRange(thisKeywords, 1, thisKeywords.length));
-						if (command.equalsIgnoreCase("sv_hostname")) {
+						if ("sv_hostname".equalsIgnoreCase(command)) {
 							args = args.replace("$brand",cfg_data.bot_hostname_base);
 						}
-						if (!args.equals("") && (command.equalsIgnoreCase("sv_hostname") || command.equalsIgnoreCase("echo") || command.equalsIgnoreCase("say"))) {
+						if (!"".equals(args) && ("sv_hostname".equalsIgnoreCase(command) || "echo".equalsIgnoreCase(command) || "say".equalsIgnoreCase(command))) {
 							args = Functions.escapeQuotes(args);
 							args = "\""+args+"\"";
 						}
 						{
-							s.in.flush(); s.in.println("echo \"-> " + command + " " + Functions.escapeQuotes(args) + " (RCON by " + hostname + ")\";\n");
+							s.in.flush(); s.in.println("echo \"-> " + command + " " + Functions.escapeQuotes(args) + " (RCON by " + context.member + ")\";\n");
 							s.in.flush(); s.in.println(command + " " + args + ";\n");
 						}
-						channel.sendMessage("Command '"+thisMessage+"' sent.");
+						context.channel.sendMessage("Command '"+thisMessage+"' sent.");
 						String logSender = (isHoster ? "their own" : bold(s.userId) + "'s");
-						String logStr = bold(userInfo(hostname)) + " sends to " + logSender + " server on port " + port + ": " + thisMessage;
+						String logStr = bold(userInfo(context.member)) + " sends to " + logSender + " server on port " + port + ": " + thisMessage;
 						if (isHoster)
 							sendLogUserMessage(logStr);
 						else
 							sendLogModeratorMessage(logStr);
 					}
 					else
-						channel.sendMessage("You do not own this server.");
+						context.channel.sendMessage("You do not own this server.");
 				}
 				else
-					channel.sendMessage("Server does not exist.");
+					context.channel.sendMessage("Server does not exist.");
 			}
 			else
-				channel.sendMessage("Port must be a number!");
+				context.channel.sendMessage("Port must be a number!");
 		}
 		else
-			channel.sendMessage("Incorrect syntax! Correct syntax is .send <port> <command>");
+			context.channel.sendMessage("Incorrect syntax! Correct syntax is .send <port> <command>");
 	}
 	
 	/**
@@ -577,17 +581,17 @@ public class Bot implements ServerManager {
 	 * @param keywords String[] - array of words in message sent
 	 * @param sender
 	 */
-	private void sendCommandAll(String[] keywords, Member sender, MessageChannel channel) {
-		if (keywords.length > 1) {
+	void sendCommandAll(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
+		if (parseResult.getParameterCount() > 1) {
 			if (servers != null) {
-				String entireMessage = String.join(" ", Arrays.copyOfRange(keywords, 1, keywords.length));
+				String entireMessage = String.join(" ", String.valueOf(parseResult.getParameterValue(1 - 1)));
 				String thisMessage = entireMessage.split(";")[0]; // Only send the first message because stacked messages break somehow.. :/
 				thisMessage = thisMessage.replaceAll("^\\s+","");
 				String[] thisKeywords = thisMessage.split(" ");
-				String command = thisKeywords[0];
-				String args = String.join(" ", Arrays.copyOfRange(thisKeywords, 1, thisKeywords.length));
+				String command = String.valueOf(parseResult.getParameterValue(0 - 1));
+				String args = String.join(" ", Arrays.copyOfRange(thisKeywords, 1, parseResult.getParameterCount()));
 				if (!args.equals("") && (command.equalsIgnoreCase("sv_hostname") || command.equalsIgnoreCase("sv_website") || command.equalsIgnoreCase("logfile"))) {
-					channel.sendMessage("Error: Command " + command + " is not allowed to be sent to all servers");
+					context.channel.sendMessage("Error: Command " + command + " is not allowed to be sent to all servers");
 				}
 				else {
 					if (!args.equals("") && (command.equalsIgnoreCase("sv_hostname") || command.equalsIgnoreCase("echo") || command.equalsIgnoreCase("say"))) {
@@ -595,15 +599,15 @@ public class Bot implements ServerManager {
 						args = "\""+args+"\"";
 					}
 					for (Server s : servers) {
-						s.in.flush(); s.in.println("echo \"-> " + command + " " + Functions.escapeQuotes(args) + " (RCON by " + sender + ")\";\n");
+						s.in.flush(); s.in.println("echo \"-> " + command + " " + Functions.escapeQuotes(args) + " (RCON by " + context.member + ")\";\n");
 						s.in.flush(); s.in.println(command + " " + args + ";\n");
 					}
-					channel.sendMessage("Command '"+thisMessage+"' sent to all servers.");
-					sendLogModeratorMessage(bold(userInfo(sender)) + " sends to all servers: " + thisMessage);
+					context.channel.sendMessage("Command '"+thisMessage+"' sent to all servers.");
+					sendLogModeratorMessage(bold(userInfo(context.member)) + " sends to all servers: " + thisMessage);
 				}
 			}
 			else {
-				channel.sendMessage("There are no servers running at the moment.");
+				context.channel.sendMessage("There are no servers running at the moment.");
 			}
 		}
 	}
@@ -613,17 +617,22 @@ public class Bot implements ServerManager {
 	 */
 	public void onMessage(Message msg) {
 		final Member member = msg.member();
-		final String message = msg.content();
+		String message = msg.content();
 
 		final MessageChannel channel = msg.channel().blockingGet();
 		assert channel != null;
 
+		final boolean isDirectMessage = channel.isDM();
 		try {
-			if (channel.isDM()) {
-				onPrivateMessage(msg);
-				return;
+			if (isDirectMessage || message.startsWith(".")) {
+				assert member != null;
+				if (message.startsWith(".")) {
+					message = message.substring(1);
+				}
+				mainConversation.react(member, getRole(member), channel, message);
 			}
 
+			// TODO:
 			// Perform these only if the message starts with a period (to save processing time on trivial chat)
 			if (message.startsWith(".")) {
 				// Generate an array of keywords from the message
@@ -636,25 +645,25 @@ public class Bot implements ServerManager {
 						channel.sendMessage(processCommands(userLevel));
 						break;
 					case ".file":
-						processFile(keywords, channel);
+						processFile(null, null);
 						break;
 					case ".get":
-						processGet(keywords, channel);
+						processGet(null, null);
 						break;
 					case ".help":
-						channel.sendMessage(Objects.requireNonNullElse(cfg_data.bot_help, "Error: No help available."));
+						// TODO
 						break;
 					case ".owner":
-						processOwner(keywords, channel);
+						processOwner(null, null);
 						break;
 					case ".servers":
-						processServers(keywords, channel);
+						processServers(null, null);
 						break;
 					case ".uptime":
 						if (keywords.length == 1)
 							channel.sendMessage("I have been running for " + Functions.calculateTime(System.currentTimeMillis() - time_started));
 						else
-							calculateUptime(keywords[1], channel);
+							calculateUptime(null, null);
 						break;
 					case ".liststartwads":
 						channel.sendMessage("These wads are automatically loaded when a server is started: " + String.join(", ", cfg_data.bot_extra_wads));
@@ -667,28 +676,24 @@ public class Bot implements ServerManager {
 						break;
 				}
 				if (isAccountTypeOf(userLevel, REGISTERED)) {
-					String nick = member.nick();
-					if (nick == null) {
-						nick = member.asMention();
-					}
 					switch (keywords[0].toLowerCase()) {
 						case ".getinfo":
-							processServerInfo(userLevel, keywords, channel, member);
+							processServerInfo(null, null);
 							break;
 						case ".host":
-							processHost(userLevel, channel, nick, member.id(), message.substring(".host".length()), getMinPort());
+							processHost(null, null);
 							break;
 						case ".kill":
-							processKill(userLevel, keywords, member, channel, channel);
+							processKill(null, null);
 							break;
 						case ".killmine":
-							processKillMine(member, channel);
+							processKillMine(null, null);
 							break;
 //					case ".query":
 //						handleQuery(keywords);
 //						break;
 						case ".send":
-							sendCommand(userLevel, keywords, member, channel);
+							sendCommand(null, null);
 							break;
 						case ".rcon":
 						case ".logfile":
@@ -763,7 +768,7 @@ public class Bot implements ServerManager {
 							}
 							break;
 						case ".protect":
-							protectServer(keywords, channel);
+							protectServer(null, null);
 							break;
 						default:
 							break;
@@ -784,10 +789,10 @@ public class Bot implements ServerManager {
 				if (isAccountTypeOf(userLevel, MODERATOR)) { // MODERATOR
 					switch (keywords[0].toLowerCase()) {
 						case ".broadcast":
-							globalBroadcast(keywords, member, channel);
+							globalBroadcast(null, null);
 							break;
 						case ".killinactive":
-							processKillInactive(keywords, member, channel);
+							processKillInactive(null, null);
 							break;
 						default:
 							break;
@@ -806,23 +811,19 @@ public class Bot implements ServerManager {
 				if (isAccountTypeOf(userLevel, ADMIN)) {
 					switch (keywords[0].toLowerCase()) {
 						case ".killall":
-							processKillAll(member, channel);
+							processKillAll(null, null);
 							break;
 						case ".killversion":
-							processKillVersion(keywords, member, channel);
-							break;
-						case ".notice":
-							setNotice(keywords, userLevel, channel);
-							sendLogAdminMessage(bold(userInfo(member)) + " sets notice to " + String.join(" ", Arrays.copyOfRange(keywords, 1, keywords.length)));
+							processKillVersion(null, null);
 							break;
 						case ".off":
-							processOff(member, channel);
+							processOff(null, null);
 							break;
 						case ".on":
-							processOn(member, channel);
+							processOn(null, null);
 							break;
 						case ".reloadconfig":
-							reloadConfigFile();
+							reloadConfigFile(null, null);
 							channel.sendMessage("Configuration file has been successfully reloaded.");
 							sendLogAdminMessage(bold(userInfo(member)) + " reloaded the config file");
 							break;
@@ -832,7 +833,7 @@ public class Bot implements ServerManager {
 							sendLogAdminMessage(bold(userInfo(member)) + " reloaded the zandronum versions");
 							break;
 						case ".sendall":
-							sendCommandAll(keywords, member, channel);
+							sendCommandAll(null, null);
 							break;
 						case ".debug":
 							debugMode = !debugMode;
@@ -901,6 +902,16 @@ public class Bot implements ServerManager {
 		}
 	}
 
+	public List<BotCommand> entrypoint() {
+		return Arrays.asList(
+
+		);
+	}
+
+	private static BotCommand cmd(String commandSpec, AccountType minimalRole, BotCommandMethod method) {
+		return new BotCommand(commandSpec, minimalRole, method);
+	}
+
 	private AccountType getRole(Member member) {
 		final Set<Role> roles;
 		if (member != null) {
@@ -959,10 +970,10 @@ public class Bot implements ServerManager {
 						channel.sendMessage("Incorrect syntax! Usage is: /msg " + " changepw <new_password>");
 					break;
 				case ".getinfo":
-					processServerInfo(userLevel, keywords, channel, member);
+					processServerInfo(null, null);
 					break;
 				case ".send":
-					sendCommand(userLevel, keywords, member, channel);
+					sendCommand(null, null);
 					break;
 				case ".rcon":
 				case ".logfile":
@@ -1000,7 +1011,7 @@ public class Bot implements ServerManager {
 						deleteExtraWad(String.join(" ", Arrays.copyOfRange(message.split(" "), 1, message.split(" ").length)), member, channel);
 					break;
 				case ".msg":
-					messageChannel(keywords, channel);
+// TODO:					messageChannel(keywords, channel);
 					sendLogAdminMessage("**" + userInfo(member) + "** sent message: **" + message.substring(message.indexOf(' ')+1));
 					break;
 				case ".action":
@@ -1055,56 +1066,21 @@ public class Bot implements ServerManager {
 	 * @param port String - port numero
 	 * @param channel
 	 */
-	public void calculateUptime(String port, MessageChannel channel) {
-		if (Functions.isInteger(port)) {
-			int portValue = Integer.valueOf(port);
+	public void calculateUptime(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
+		if (Functions.isInteger(String.valueOf(parseResult.getParameterValue(1 - 1)))) {
+			int portValue = Integer.valueOf(String.valueOf(parseResult.getParameterValue(1 - 1)));
 			Server s = getServer(portValue);
 			if (s != null) {
 				if (portValue >= min_port && portValue < max_port)
-					channel.sendMessage(s.port + " has been running for " + Functions.calculateTime(System.currentTimeMillis() - s.time_started));
+					context.channel.sendMessage(s.port + " has been running for " + Functions.calculateTime(System.currentTimeMillis() - s.time_started));
 				else
-					channel.sendMessage("Port must be between " + min_port + " and " + max_port);
+					context.channel.sendMessage("Port must be between " + min_port + " and " + max_port);
 			}
 			else
-				channel.sendMessage("There is no server running on port " + port);
+				context.channel.sendMessage("There is no server running on port " + String.valueOf(parseResult.getParameterValue(1 - 1)));
 		}
 		else
-			channel.sendMessage("Port must be a number (ex: .uptime 15000)");
-	}
-
-	/**
-	 * Sets the notice (global announcement to all servers)
-	 * @param keywords String[] - array of words (message)
-	 * @param userLevel int - bitmask level
-	 * @param channel
-	 */
-	public void setNotice(String[] keywords, AccountType userLevel, MessageChannel channel) {
-		if (keywords.length == 1) {
-			channel.sendMessage("Notice is: " + cfg_data.bot_notice);
-			return;
-		}
-		if (isAccountTypeOf(userLevel, ADMIN)) {
-			cfg_data.bot_notice = String.join(" ", Arrays.copyOfRange(keywords, 1, keywords.length));
-			channel.sendMessage("New notice has been set.");
-		}
-		else
-			channel.sendMessage("You do not have permission to set the notice.");
-	}
-
-	/**
-	 * Sends a message to the channel, from the bot
-	 * @param keywords String[] - message, split by spaces
-	 * @param channel String - name of the sender
-	 */
-	private void messageChannel(String[] keywords, MessageChannel channel) {
-		if (keywords.length < 2 || !channel.isGuild())
-			channel.sendMessage("Incorrect syntax! Correct usage is .msg your_message");
-		else {
-			String message = String.join(" ", Arrays.copyOfRange(keywords, 1, keywords.length));
-
-			final Optional<GuildChannel> targetChannel = channelByName(cfg_data.discord_channel);
-			targetChannel.ifPresent(ch -> ch.asMessageChannel().sendMessage(message));
-		}
+			context.channel.sendMessage("Port must be a number (ex: .uptime 15000)");
 	}
 
 	/**
@@ -1112,16 +1088,16 @@ public class Bot implements ServerManager {
 	 * @param keywords The keywords sent (should be a length of two)
 	 * @param channel The channel to respond to
 	 */
-	private void processFile(String[] keywords, MessageChannel channel) {
+	public void processFile(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
 		logMessage(LOGLEVEL_TRIVIAL, "Displaying processFile().");
-		if (keywords.length == 2) {
-			File file = new File(cfg_data.bot_wad_directory_path + Functions.cleanInputFile(keywords[1].toLowerCase()));
+		if (parseResult.getParameterCount() == 2) {
+			File file = new File(cfg_data.bot_wad_directory_path + Functions.cleanInputFile(String.valueOf(parseResult.getParameterValue(1 - 1)).toLowerCase()));
 			if (file.exists())
-				channel.sendMessage("File '" + keywords[1].toLowerCase() + "' exists on the server.");
+				context.channel.sendMessage("File '" + String.valueOf(parseResult.getParameterValue(1 - 1)).toLowerCase() + "' exists on the server.");
 			else
-				channel.sendMessage("Not found!");
+				context.channel.sendMessage("Not found!");
 		} else
-			channel.sendMessage("Incorrect syntax, use: .file <filename.wad>");
+			context.channel.sendMessage("Incorrect syntax, use: .file <filename.wad>");
 	}
 
 	/**
@@ -1129,22 +1105,22 @@ public class Bot implements ServerManager {
 	 * @param keywords The field the user wants
 	 * @param channel
 	 */
-	private void processGet(String[] keywords, MessageChannel channel) {
+	void processGet(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
 		logMessage(LOGLEVEL_TRIVIAL, "Displaying processGet().");
-		if (keywords.length != 3) {
-			channel.sendMessage("Proper syntax: .get <port> <property>");
+		if (parseResult.getParameterCount() != 3) {
+			context.channel.sendMessage("Proper syntax: .get <port> <property>");
 			return;
 		}
-		if (!Functions.isInteger(keywords[1])) {
-			channel.sendMessage("Port is not a valid number");
+		if (!Functions.isInteger(String.valueOf(parseResult.getParameterValue(1 - 1)))) {
+			context.channel.sendMessage("Port is not a valid number");
 			return;
 		}
-		Server tempServer = getServer(Integer.parseInt(keywords[1]));
+		Server tempServer = getServer(Integer.parseInt(String.valueOf(parseResult.getParameterValue(1 - 1))));
 		if (tempServer == null) {
-			channel.sendMessage("There is no server running on this port.");
+			context.channel.sendMessage("There is no server running on this port.");
 			return;
 		}
-		channel.sendMessage(tempServer.getField(keywords[2]));
+		context.channel.sendMessage(tempServer.getField(String.valueOf(parseResult.getParameterValue(2 - 1))));
 	}
 
 	/**
@@ -1154,32 +1130,32 @@ public class Bot implements ServerManager {
 	 * @param hostname IRC data associated with the sender
 	 * @param message The entire message to be processed
 	 */
-	public void processHost(AccountType userLevel, MessageChannel channel, String userName, String hostname, String message, int port) throws InputException {
-		logMessage(LOGLEVEL_NORMAL, "Processing the host command for " + hostname + " with the message \"" + message + "\".");
-		if (botEnabled || isAccountTypeOf(userLevel, ADMIN)) {
-			boolean autoRestart = (message.contains("autorestart=true") || message.contains("autorestart=on"));
-			int slots = MySQL.getMaxSlots(hostname);
-			int userServers = getUserServers(hostname).size();
+	public void processHost(@Nonnull BotContext context, @Nonnull ParseResult parseResult) throws InputException {
+		logMessage(LOGLEVEL_NORMAL, "Processing the host command for " + context.member + " with the message \"" + String.valueOf(parseResult.getParameterValue(1 - 1)) + "\".");
+		if (botEnabled || isAccountTypeOf(context.level, ADMIN)) {
+			boolean autoRestart = (String.valueOf(parseResult.getParameterValue(1 - 1)).contains("autorestart=true") || String.valueOf(parseResult.getParameterValue(1 - 1)).contains("autorestart=on"));
+			int slots = MySQL.getMaxSlots(context.member.id());
+			int userServers = getUserServers(context.member.id()).size();
 			if (slots > userServers) {
-				final Map<String, String> arguments = new KeyValueParser(message).parse();
+				final Map<String, String> arguments = new KeyValueParser(String.valueOf(parseResult.getParameterValue(1 - 1))).parse();
 				Server.handleHostCommand(
-						toMessageReceiver(channel),
+						toMessageReceiver(context.channel),
 						this,
 						cfg_data,
 						versionParser,
-						userName,
-						hostname,
+						context.nickname,
+						context.member.id(),
 						arguments,
-						userLevel,
+						context.level,
 						autoRestart,
-						port,
+						getMinPort(),
 						null,
 						false);
 			} else
-				channel.sendMessage("You have reached your server limit (" + slots + ")");
+				context.channel.sendMessage("You have reached your server limit (" + slots + ")");
 		}
 		else
-			channel.sendMessage("The bot is currently disabled from hosting for the time being. Sorry for any inconvenience!");
+			context.channel.sendMessage("The bot is currently disabled from hosting for the time being. Sorry for any inconvenience!");
 	}
 
 	private MessageReceiver toMessageReceiver(MessageChannel channel) {
@@ -1204,35 +1180,35 @@ public class Bot implements ServerManager {
 	 * @param sender
 	 * @param channel
 	 */
-	private void processKill(AccountType userLevel, String[] keywords, Member hostname, MessageChannel sender, MessageChannel channel) {
+	void processKill(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
 		logMessage(LOGLEVEL_NORMAL, "Processing kill.");
 		// Ensure proper syntax
-		if (keywords.length != 2) {
-			channel.sendMessage("Proper syntax: .kill <port>");
+		if (parseResult.getParameterCount() != 2) {
+			context.channel.sendMessage("Proper syntax: .kill <port>");
 			return;
 		}
 
 		// Safety net
 		if (servers == null) {
-			channel.sendMessage("Critical error: Linkedlist is null, contact an administrator.");
+			context.channel.sendMessage("Critical error: Linkedlist is null, contact an administrator.");
 			return;
 		}
 
 		// If server list is empty
 		if (servers.isEmpty()) {
-			channel.sendMessage("There are currently no servers running!");
+			context.channel.sendMessage("There are currently no servers running!");
 			return;
 		}
 
 		// Registered can only kill their own servers
-		if (isAccountTypeOf(userLevel, REGISTERED)) {
-			if (Functions.isInteger(keywords[1])) {
-				Server server = getServer(Integer.parseInt(keywords[1]));
+		if (isAccountTypeOf(context.level, REGISTERED)) {
+			if (Functions.isInteger(String.valueOf(parseResult.getParameterValue(1 - 1)))) {
+				Server server = getServer(Integer.parseInt(String.valueOf(parseResult.getParameterValue(1 - 1))));
 				if (server != null) {
-					if (server.userId.equalsIgnoreCase(hostname.id()) || isAccountTypeOf(userLevel, MODERATOR))
+					if (server.userId.equalsIgnoreCase(context.member.id()) || isAccountTypeOf(context.level, MODERATOR))
 						if (server.serverprocess != null) {
 							server.being_killed = true;
-							if (server.userId.equalsIgnoreCase(hostname.id()))
+							if (server.userId.equalsIgnoreCase(context.member.id()))
 							{
 								server.being_killed_by_owner = true;
 							}
@@ -1240,21 +1216,21 @@ public class Bot implements ServerManager {
 							server.serverprocess.terminateServer();
 						}
 						else {
-							channel.sendMessage("Error: Server process is null, contact an administrator.");
+							context.channel.sendMessage("Error: Server process is null, contact an administrator.");
 						}
 					else {
-						channel.sendMessage("Error: You do not own this server!");
+						context.channel.sendMessage("Error: You do not own this server!");
 					}
 				}
 				else {
-					channel.sendMessage("Error: There is no server running on this port.");
+					context.channel.sendMessage("Error: There is no server running on this port.");
 				}
 			} else {
-				channel.sendMessage("Improper port number.");
+				context.channel.sendMessage("Improper port number.");
 			}
 		// Admins/mods can kill anything
-		} else if (isAccountTypeOf(userLevel, MODERATOR)) {
-			killServer(keywords[1], hostname, channel); // Can pass string, will process it in the method safely if something goes wrong
+		} else if (isAccountTypeOf(context.level, MODERATOR)) {
+			killServer(String.valueOf(parseResult.getParameterValue(1 - 1)), context.member, context.channel); // Can pass string, will process it in the method safely if something goes wrong
 		}
 	}
 
@@ -1263,7 +1239,7 @@ public class Bot implements ServerManager {
 	 * @param sender
 	 * @param channel
 	 */
-	private void processKillAll(Member sender, MessageChannel channel) {
+	void processKillAll(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
 		logMessage(LOGLEVEL_IMPORTANT, "Processing killall.");
 		// If we use this.servers instead of a temporary list, it will remove the servers from the list while iterating over them
 		// This will throw a concurrent modification exception
@@ -1277,30 +1253,30 @@ public class Bot implements ServerManager {
 				s.auto_restart = false;
 				s.killServer();
 			}
-			channel.sendMessage(Functions.pluralize("Killed a total of " + serverCount + " server{s}.", serverCount));
+			context.channel.sendMessage(Functions.pluralize("Killed a total of " + serverCount + " server{s}.", serverCount));
 			//if (channel != cfg_data.irc_channel)
 			//	sendMessage(cfg_data.irc_channel, Functions.pluralize("Killed a total of " + serverCount + " server{s}.", serverCount));
-			sendLogAdminMessage(Functions.pluralize(bold(userInfo(sender)) + " Killed a total of " + bold("" + serverCount) + " server{s}.", serverCount));
+			sendLogAdminMessage(Functions.pluralize(bold(userInfo(context.member)) + " Killed a total of " + bold("" + serverCount) + " server{s}.", serverCount));
 		} else
-			channel.sendMessage("There are no servers running.");
+			context.channel.sendMessage("There are no servers running.");
 	}
 
-	private void processKillVersion(String[] keywords, Member sender, MessageChannel channel) {
-		if (keywords.length != 2) {
-			channel.sendMessage("Invalid amount of arguments. Syntax: .killversion <version>");
+	void processKillVersion(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
+		if (parseResult.getParameterCount() != 2) {
+			context.channel.sendMessage("Invalid amount of arguments. Syntax: .killversion <version>");
 			return;
 		}
 
-		String version = keywords[1];
+		String version = String.valueOf(parseResult.getParameterValue(1 - 1));
 
 		if (!vSHashmap.containsKey(version)) {
-			channel.sendMessage("Unknown version " + version);
+			context.channel.sendMessage("Unknown version " + version);
 			return;
 		}
 
 		List<Server> tempList = new ArrayList<>(vSHashmap.get(version));
 		if (tempList.size() < 1) {
-			channel.sendMessage("No servers to kill.");
+			context.channel.sendMessage("No servers to kill.");
 			return;
 		}
 
@@ -1313,8 +1289,8 @@ public class Bot implements ServerManager {
 			killed++;
 		}
 
-		sendLogAdminMessage(bold(userInfo(sender)) + " kills all " + killed + bold(keywords[1]) + " servers");
-		channel.sendMessage("Killed a total of " + killed + " servers.");
+		sendLogAdminMessage(bold(userInfo(context.member)) + " kills all " + killed + bold(String.valueOf(parseResult.getParameterValue(1 - 1))) + " servers");
+		context.channel.sendMessage("Killed a total of " + killed + " servers.");
 		//if (channel != cfg_data.irc_channel)
 		//	sendMessage(cfg_data.irc_channel, "Killed a total of " + killed + " servers.");
 	}
@@ -1323,11 +1299,11 @@ public class Bot implements ServerManager {
 	 * @param hostname The hostname of the person invoking this command
 	 * @param channel
 	 */
-	private void processKillMine(Member hostname, MessageChannel channel) {
+	private void processKillMine(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
 		logMessage(LOGLEVEL_TRIVIAL, "Processing killmine.");
-		List<Server> servers = getUserServers(hostname.id());
+		List<Server> servers = getUserServers(context.member.id());
 		if (servers.isEmpty()) {
-			channel.sendMessage("There are no servers running.");
+			context.channel.sendMessage("There are no servers running.");
 		} else {
 			ArrayList<String> ports = new ArrayList<>();
 			for (Server s : servers) {
@@ -1338,13 +1314,13 @@ public class Bot implements ServerManager {
 				ports.add(String.valueOf(s.port));
 			}
 			if (!ports.isEmpty()) {
-				sendLogUserMessage(Functions.pluralize("%s Killed their %d server{s} (%s)".formatted(bold(userInfo(hostname)), ports.size(), String.join(", ", ports)), ports.size()));
-				channel.sendMessage(Functions.pluralize("Killed your %d server{s} (%s)".formatted(ports.size(), String.join(", ", ports)), ports.size()));
+				sendLogUserMessage(Functions.pluralize("%s Killed their %d server{s} (%s)".formatted(bold(userInfo(context.member)), ports.size(), String.join(", ", ports)), ports.size()));
+				context.channel.sendMessage(Functions.pluralize("Killed your %d server{s} (%s)".formatted(ports.size(), String.join(", ", ports)), ports.size()));
 				//if (channel != cfg_data.irc_channel)
 				//	sendMessage(cfg_data.irc_channel, Functions.pluralize(sender + " killed their " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") +")", ports.size()));
 			}
 			else {
-				channel.sendMessage("You do not have any servers running.");
+				context.channel.sendMessage("You do not have any servers running.");
 			}
 		}
 	}
@@ -1355,21 +1331,21 @@ public class Bot implements ServerManager {
 	 * @param sender
 	 * @param channel
 	 */
-	private void processKillInactive(String[] keywords, Member sender, MessageChannel channel) {
+	void processKillInactive(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
 		logMessage(LOGLEVEL_NORMAL, "Processing a kill of inactive servers.");
-		if (keywords.length < 2) {
-			channel.sendMessage("Proper syntax: .killinactive <days since> (ex: use .killinactive 3 to kill servers that haven't seen anyone for 3 days)");
+		if (parseResult.getParameterCount() < 2) {
+			context.channel.sendMessage("Proper syntax: .killinactive <days since> (ex: use .killinactive 3 to kill servers that haven't seen anyone for 3 days)");
 			return;
 		}
-		if (Functions.isInteger(keywords[1])) {
+		if (Functions.isInteger(String.valueOf(parseResult.getParameterValue(1 - 1)))) {
 			ArrayList<String> ports = new ArrayList<>();
-			int numOfDays = Integer.parseInt(keywords[1]);
+			int numOfDays = Integer.parseInt(String.valueOf(parseResult.getParameterValue(1 - 1)));
 			if (numOfDays > 0) {
 				if (servers == null || servers.isEmpty()) {
-					channel.sendMessage("No servers to kill.");
+					context.channel.sendMessage("No servers to kill.");
 					return;
 				}
-				channel.sendMessage("Killing servers with " + numOfDays + "+ days of inactivity.");
+				context.channel.sendMessage("Killing servers with " + numOfDays + "+ days of inactivity.");
 				//if (channel != cfg_data.irc_channel)
 				//	sendMessage(cfg_data.irc_channel, "Killing servers with " + numOfDays + "+ days of inactivity.");
 				// Temporary list to avoid concurrent modification exception
@@ -1385,19 +1361,19 @@ public class Bot implements ServerManager {
 						}
 				}
 				if (ports.size() == 0) {
-					channel.sendMessage("No servers were killed.");
+					context.channel.sendMessage("No servers were killed.");
 				}
 				else {
-					sendLogAdminMessage(Functions.pluralize(bold(userInfo(sender)) + " Killed " + ports.size() + " server{s} (" + String.join(", ", ports) + ")", ports.size()));
-					channel.sendMessage(Functions.pluralize("Killed " + ports.size() + " server{s} (" + String.join(", ", ports) + ")", ports.size()));
+					sendLogAdminMessage(Functions.pluralize(bold(userInfo(context.member)) + " Killed " + ports.size() + " server{s} (" + String.join(", ", ports) + ")", ports.size()));
+					context.channel.sendMessage(Functions.pluralize("Killed " + ports.size() + " server{s} (" + String.join(", ", ports) + ")", ports.size()));
 					//if (channel != cfg_data.irc_channel)
 					//	sendMessage(cfg_data.irc_channel, Functions.pluralize("Killed " + ports.size() + " server{s} (" + Functions.implode(ports, ", ") + ")", ports.size()));
 				}
 			} else {
-				channel.sendMessage("Using zero or less for .killinactive is not allowed.");
+				context.channel.sendMessage("Using zero or less for .killinactive is not allowed.");
 			}
 		} else {
-			channel.sendMessage("Unexpected parameter for method.");
+			context.channel.sendMessage("Unexpected parameter for method.");
 		}
 	}
 
@@ -1406,12 +1382,12 @@ public class Bot implements ServerManager {
 	 * @param sender
 	 * @param channel
 	 */
-	private void processOff(Member sender, MessageChannel channel) {
+	void processOff(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
 		logMessage(LOGLEVEL_IMPORTANT, "An admin has disabled hosting.");
 		if (botEnabled) {
 			botEnabled = false;
-			sendLogAdminMessage(bold(userInfo(sender)) + " disables hosting");
-			channel.sendMessage("Bot disabled.");
+			sendLogAdminMessage(bold(userInfo(context.member)) + " disables hosting");
+			context.channel.sendMessage("Bot disabled.");
 			//if (channel != cfg_data.irc_channel)
 			//	sendMessage(cfg_data.irc_channel, "Bot disabled.");
 		}
@@ -1422,12 +1398,12 @@ public class Bot implements ServerManager {
 	 * @param sender
 	 * @param channel
 	 */
-	private void processOn(Member sender, MessageChannel channel) {
+	void processOn(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
 		logMessage(LOGLEVEL_IMPORTANT, "An admin has re-enabled hosting.");
 		if (!botEnabled) {
 			botEnabled = true;
-			sendLogAdminMessage(bold(userInfo(sender)) + " enables hosting");
-			channel.sendMessage("Bot enabled.");
+			sendLogAdminMessage(bold(userInfo(context.member)) + " enables hosting");
+			context.channel.sendMessage("Bot enabled.");
 			//if (channel != cfg_data.irc_channel)
 			//	sendMessage(cfg_data.irc_channel, "Bot enabled.");
 		}
@@ -1438,47 +1414,21 @@ public class Bot implements ServerManager {
 	 * @param keywords The keywords to pass
 	 * @param channel
 	 */
-	private void processOwner(String[] keywords, MessageChannel channel) {
+	void processOwner(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
 		logMessage(LOGLEVEL_DEBUG, "Processing an owner.");
-			if (keywords.length == 2) {
-				if (Functions.isInteger(keywords[1])) {
-					Server s = getServer(Integer.parseInt(keywords[1]));
+			if (parseResult.getParameterCount() == 2) {
+				if (Functions.isInteger(String.valueOf(parseResult.getParameterValue(1 - 1)))) {
+					Server s = getServer(Integer.parseInt(String.valueOf(parseResult.getParameterValue(1 - 1))));
 					if (s != null)
-						channel.sendMessage("The owner of port " + keywords[1] + " is: " + s.userName + "[" + s.userId + "].");
+						context.channel.sendMessage("The owner of port " + String.valueOf(parseResult.getParameterValue(1 - 1)) + " is: " + s.userName + "[" + s.userId + "].");
 					else
-						channel.sendMessage("There is no server running on " + keywords[1] + ".");
+						context.channel.sendMessage("There is no server running on " + String.valueOf(parseResult.getParameterValue(1 - 1)) + ".");
 				} else
-					channel.sendMessage("Invalid port number.");
+					context.channel.sendMessage("Invalid port number.");
 			} else
-				channel.sendMessage("Improper syntax, use: .owner <port>");
+				context.channel.sendMessage("Improper syntax, use: .owner <port>");
 	}
 
-	/**
-	 * Will attempt to query a server and generate a line of text
-	 * @param keywords The keywords sent
-	 */
-	/*
-	private void handleQuery(String[] keywords) {
-		if (keywords.length == 2) {
-			String[] ipFragment = keywords[1].split(":");
-			if (ipFragment.length == 2) {
-				if (ipFragment[0].length() > 0 && ipFragment[1].length() > 0 && Functions.isNumeric(ipFragment[1])) {
-					int port = Integer.parseInt(ipFragment[1]);
-					if (port > 0 && port < 65535) {
-						sendMessageToChannel("Attempting to query " + keywords[1] + ", please wait...");
-						ServerQueryRequest request = new ServerQueryRequest(ipFragment[0], port);
-						if (!queryManager.addRequest(request))
-							sendMessageToChannel("Too many people requesting queries. Please try again later.");
-					} else
-						sendMessageToChannel("Port value is not between 0 - 65536 (ends exclusive), please fix your IP:port and try again.");
-				} else
-					sendMessageToChannel("Missing (or too many) port delimiters, Usage: .query <ip:port>   (example: .query 98.173.12.44:20555)");
-			} else
-				sendMessageToChannel("Missing (or too many) port delimiters, Usage: .query <ip:port>   (example: .query 98.173.12.44:20555)");
-		} else
-			sendMessageToChannel("Usage: .query <ip:port>   (example: .query 98.173.12.44:20555)");
-	}
-	*/
 	/**
 	 * Handles RCON stuff
 	 * @param userLevel int - the user's level (permissions)
@@ -1486,23 +1436,23 @@ public class Bot implements ServerManager {
 	 * @param channel String - the nickname of the sender
 	 * @param hostname String - the hostname of the sender
 	 */
-	private void processServerInfo(AccountType userLevel, String[] keywords, MessageChannel channel, Member hostname) {
-		logMessage(LOGLEVEL_NORMAL, "Processing a request for rcon (from " + channel + ").");
-		if (isAccountTypeOf(userLevel, REGISTERED)) {
-			if (keywords.length == 2) {
-				if (Functions.isInteger(keywords[1])) {
-					int port = Integer.parseInt(keywords[1]);
+	void processServerInfo(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
+		logMessage(LOGLEVEL_NORMAL, "Processing a request for rcon (from " + context.channel + ").");
+		if (isAccountTypeOf(context.level, REGISTERED)) {
+			if (parseResult.getParameterCount() == 2) {
+				if (Functions.isInteger(String.valueOf(parseResult.getParameterValue(1 - 1)))) {
+					int port = Integer.parseInt(String.valueOf(parseResult.getParameterValue(1 - 1)));
 					Server s = getServer(port);
 					if (s != null) {
-						boolean isHoster = s.userId.equals(hostname.id());
-						if (isHoster || isAccountTypeOf(userLevel, MODERATOR)) {
+						boolean isHoster = s.userId.equals(context.member.id());
+						if (isHoster || isAccountTypeOf(context.level, MODERATOR)) {
 							String logSender = (isHoster ? "their own" : bold(s.userName) + "'s");
-							String logStr = bold(userInfo(hostname)) + " requests server info for " + logSender + " server on port " + port;
+							String logStr = bold(userInfo(context.member)) + " requests server info for " + logSender + " server on port " + port;
 							
-							channel.sendMessage("Log File: " + cfg_data.static_link + "/logs/" + s.server_id + ".txt");
-							channel.sendMessage("RCON Password: " + s.rcon_password);
-							channel.sendMessage("Connect Password: " + s.connect_password);
-							channel.sendMessage("Join Password: " + s.join_password);
+							context.channel.sendMessage("Log File: " + cfg_data.static_link + "/logs/" + s.server_id + ".txt");
+							context.channel.sendMessage("RCON Password: " + s.rcon_password);
+							context.channel.sendMessage("Connect Password: " + s.connect_password);
+							context.channel.sendMessage("Join Password: " + s.join_password);
 							
 							if (isHoster) {
 								sendLogUserMessage(logStr);
@@ -1511,16 +1461,16 @@ public class Bot implements ServerManager {
 							}
 						}
 						else
-							channel.sendMessage("You do not own this server.");
+							context.channel.sendMessage("You do not own this server.");
 					}
 					else
-						channel.sendMessage("Server does not exist.");
+						context.channel.sendMessage("Server does not exist.");
 				}
 				else
-					channel.sendMessage("Port must be a number!");
+					context.channel.sendMessage("Port must be a number!");
 			}
 			else
-				channel.sendMessage("Incorrect syntax! Correct syntax is .rcon <port>");
+				context.channel.sendMessage("Incorrect syntax! Correct syntax is .rcon <port>");
 		}
 	}
 
@@ -1529,24 +1479,24 @@ public class Bot implements ServerManager {
 	 * @param keywords String[] - the message
 	 * @param channel
 	 */
-	private void processServers(String[] keywords, MessageChannel channel) {
+	void processServers(@Nonnull BotContext context, @Nonnull ParseResult parseResult) {
 		logMessage(LOGLEVEL_NORMAL, "Getting a list of servers.");
-		if (keywords.length == 2) {
-			List<Server> servers = getUserServers(keywords[1]);
+		if (parseResult.getParameterCount() == 2) {
+			List<Server> servers = getUserServers(String.valueOf(parseResult.getParameterValue(1 - 1)));
 			if (!servers.isEmpty()) {
 				for (Server server : servers) {
-					channel.sendMessage( server.port + ": \"" + server.servername + ((server.wads != null) ?
+					context.channel.sendMessage( server.port + ": \"" + server.servername + ((server.wads != null) ?
 					"\" with wads " + String.join(", ", server.wads) : ""));
 				}
 			}
 			else
-				channel.sendMessage("User " + keywords[1] + " has no servers running.");
+				context.channel.sendMessage("User " + String.valueOf(parseResult.getParameterValue(1 - 1)) + " has no servers running.");
 		}
-		else if (keywords.length == 1) {
-			channel.sendMessage(Functions.pluralize("There are " + servers.size() + " server{s}.", servers.size()));
+		else if (parseResult.getParameterCount() == 1) {
+			context.channel.sendMessage(Functions.pluralize("There are " + servers.size() + " server{s}.", servers.size()));
 		}
 		else
-			channel.sendMessage("Incorrect syntax! Correct usage is .servers or .servers <username>");
+			context.channel.sendMessage("Incorrect syntax! Correct usage is .servers or .servers <username>");
 	}
 
 	/**
